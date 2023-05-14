@@ -43,7 +43,7 @@ struct port_device
 };
 
 static void virtio_console_send_ctrl(struct virtio_console_device *virtio_console_dev,
-        struct virtio_console_control *ctrl)
+                                     struct virtio_console_control *ctrl)
 {
     rt_uint16_t id;
     struct virtio_device *virtio_dev = &virtio_console_dev->virtio_dev;
@@ -62,7 +62,7 @@ static void virtio_console_send_ctrl(struct virtio_console_device *virtio_consol
     virtio_free_desc(virtio_dev, VIRTIO_CONSOLE_QUEUE_CTRL_TX, id);
 
     virtio_fill_desc(virtio_dev, VIRTIO_CONSOLE_QUEUE_CTRL_TX, id,
-            virtio_console_dev->info[id].tx_ctrl_paddr, sizeof(struct virtio_console_control), 0, 0);
+                     virtio_console_dev->info[id].tx_ctrl_paddr, sizeof(struct virtio_console_control), 0, 0);
 
     virtio_submit_chain(virtio_dev, VIRTIO_CONSOLE_QUEUE_CTRL_TX, id);
 
@@ -84,17 +84,16 @@ static rt_err_t virtio_console_port_control(rt_device_t dev, int cmd, void *args
 
 #ifdef RT_USING_DEVICE_OPS
 const static struct rt_device_ops virtio_console_port_ops =
-{
-    virtio_console_port_init,
-    virtio_console_port_open,
-    virtio_console_port_close,
-    virtio_console_port_read,
-    virtio_console_port_write,
-    virtio_console_port_control
-};
+    {
+        virtio_console_port_init,
+        virtio_console_port_open,
+        virtio_console_port_close,
+        virtio_console_port_read,
+        virtio_console_port_write,
+        virtio_console_port_control};
 #endif
 
-static rt_err_t virtio_console_port_create(struct virtio_console_device *virtio_console_dev)
+rt_err_t virtio_console_port_create(struct virtio_console_device *virtio_console_dev)
 {
     rt_uint32_t port_id;
     char dev_name[RT_NAME_MAX];
@@ -133,14 +132,14 @@ static rt_err_t virtio_console_port_create(struct virtio_console_device *virtio_
 
     port_dev->parent.type = RT_Device_Class_Char;
 #ifdef RT_USING_DEVICE_OPS
-    port_dev->parent.ops  = &virtio_console_port_ops;
+    port_dev->parent.ops = &virtio_console_port_ops;
 #else
-    port_dev->parent.init     = virtio_console_port_init;
-    port_dev->parent.open     = virtio_console_port_open;
-    port_dev->parent.close    = virtio_console_port_close;
-    port_dev->parent.read     = virtio_console_port_read;
-    port_dev->parent.write    = virtio_console_port_write;
-    port_dev->parent.control  = virtio_console_port_control;
+    port_dev->parent.init = virtio_console_port_init;
+    port_dev->parent.open = virtio_console_port_open;
+    port_dev->parent.close = virtio_console_port_close;
+    port_dev->parent.read = virtio_console_port_read;
+    port_dev->parent.write = virtio_console_port_write;
+    port_dev->parent.control = virtio_console_port_control;
 #endif
 
     port_dev->parent.rx_indicate = RT_NULL;
@@ -186,7 +185,7 @@ static rt_err_t virtio_console_port_create(struct virtio_console_device *virtio_
 }
 
 static void virtio_console_port_destroy(struct virtio_console_device *virtio_console_dev,
-        struct port_device *port_dev)
+                                        struct port_device *port_dev)
 {
     struct virtio_console_control set_ctrl;
 
@@ -229,7 +228,7 @@ static rt_err_t virtio_console_port_init(rt_device_t dev)
         void *addr = &port_dev->info[id].rx_char;
 
         virtio_fill_desc(virtio_dev, rx_queue_index, id,
-                VIRTIO_VA2PA(addr), sizeof(char), VIRTQ_DESC_F_WRITE, 0);
+                         VIRTIO_VA2PA(addr), sizeof(char), VIRTQ_DESC_F_WRITE, 0);
 
         queue_rx->avail->ring[id] = id;
     }
@@ -381,7 +380,7 @@ static rt_ssize_t virtio_console_port_write(rt_device_t dev, rt_off_t pos, const
         virtio_free_desc(virtio_dev, queue_tx_index, id);
 
         virtio_fill_desc(virtio_dev, queue_tx_index, id,
-                VIRTIO_VA2PA(&port_dev->info[id].tx_char), sizeof(char), 0, 0);
+                         VIRTIO_VA2PA(&port_dev->info[id].tx_char), sizeof(char), 0, 0);
 
         virtio_submit_chain(virtio_dev, queue_tx_index, id);
 
@@ -423,11 +422,11 @@ static rt_err_t virtio_console_port_control(rt_device_t dev, int cmd, void *args
         port_dev->rx_notify = RT_TRUE;
         break;
     case VIRTIO_DEVICE_CTRL_CONSOLE_PORT_DESTROY:
-        {
-            port_dev->need_destroy = RT_TRUE;
-            port_dev->rx_notify = RT_FALSE;
-        }
-        break;
+    {
+        port_dev->need_destroy = RT_TRUE;
+        port_dev->rx_notify = RT_FALSE;
+    }
+    break;
     default:
         status = -RT_EINVAL;
         break;
@@ -440,6 +439,12 @@ static rt_err_t virtio_console_init(rt_device_t dev)
 {
     struct virtio_console_device *virtio_console_dev = (struct virtio_console_device *)dev;
     struct virtio_device *virtio_dev = &virtio_console_dev->virtio_dev;
+
+    rt_thread_t virtio_thread = virtio_thread_self();
+    if(virtio_thread)
+    {
+        rt_thread_startup(virtio_thread);
+    }
 
     if (virtio_has_feature(virtio_dev, VIRTIO_CONSOLE_F_MULTIPORT))
     {
@@ -458,7 +463,7 @@ static rt_err_t virtio_console_init(rt_device_t dev)
             void *addr = &virtio_console_dev->info[id].rx_ctrl;
 
             virtio_fill_desc(virtio_dev, VIRTIO_CONSOLE_QUEUE_CTRL_RX, id,
-                    VIRTIO_VA2PA(addr), sizeof(struct virtio_console_control), VIRTQ_DESC_F_WRITE, 0);
+                             VIRTIO_VA2PA(addr), sizeof(struct virtio_console_control), VIRTQ_DESC_F_WRITE, 0);
 
             queue_ctrl_rx->avail->ring[id] = id;
         }
@@ -503,14 +508,13 @@ static rt_err_t virtio_console_control(rt_device_t dev, int cmd, void *args)
 
 #ifdef RT_USING_DEVICE_OPS
 const static struct rt_device_ops virtio_console_ops =
-{
-    virtio_console_init,
-    RT_NULL,
-    RT_NULL,
-    RT_NULL,
-    RT_NULL,
-    virtio_console_control
-};
+    {
+        virtio_console_init,
+        RT_NULL,
+        RT_NULL,
+        RT_NULL,
+        RT_NULL,
+        virtio_console_control};
 #endif
 
 static void virtio_console_isr(int irqno, void *param)
@@ -529,7 +533,8 @@ static void virtio_console_isr(int irqno, void *param)
     virtio_interrupt_ack(virtio_dev);
     rt_hw_dsb();
 
-    do {
+    do
+    {
         struct virtq *queue_rx;
         struct virtio_console_control *ctrl, set_ctrl;
 
@@ -562,48 +567,53 @@ static void virtio_console_isr(int irqno, void *param)
         switch (ctrl->event)
         {
         case VIRTIO_CONSOLE_PORT_ADD:
-            {
-                set_ctrl.id = ctrl->id;
-                set_ctrl.event = VIRTIO_CONSOLE_PORT_READY;
-                set_ctrl.value = 1;
+        {
+            set_ctrl.id = ctrl->id;
+            set_ctrl.event = VIRTIO_CONSOLE_PORT_READY;
+            set_ctrl.value = 1;
 
-            #ifdef RT_USING_SMP
-                rt_spin_unlock_irqrestore(&virtio_dev->spinlock, level);
-            #endif
+#ifdef RT_USING_SMP
+            rt_spin_unlock_irqrestore(&virtio_dev->spinlock, level);
+#endif
 
-                virtio_console_send_ctrl(virtio_console_dev, &set_ctrl);
+            virtio_console_send_ctrl(virtio_console_dev, &set_ctrl);
 
-            #ifdef RT_USING_SMP
-                level = rt_spin_lock_irqsave(&virtio_dev->spinlock);
-            #endif
-            }
-            break;
+#ifdef RT_USING_SMP
+            level = rt_spin_lock_irqsave(&virtio_dev->spinlock);
+#endif
+        }
+        break;
         case VIRTIO_CONSOLE_PORT_REMOVE:
             break;
         case VIRTIO_CONSOLE_RESIZE:
             break;
         case VIRTIO_CONSOLE_PORT_OPEN:
+        {
+            set_ctrl.id = ctrl->id;
+            set_ctrl.event = VIRTIO_CONSOLE_PORT_OPEN;
+            set_ctrl.value = 1;
+
+#ifdef RT_USING_SMP
+            rt_spin_unlock_irqrestore(&virtio_dev->spinlock, level);
+#endif
+
+            virtio_console_send_ctrl(virtio_console_dev, &set_ctrl);
+
+#ifdef RT_USING_SMP
+            level = rt_spin_lock_irqsave(&virtio_dev->spinlock);
+#endif
+            rt_thread_t virtio_thread = virtio_thread_self();
+            if(virtio_thread)
             {
-                set_ctrl.id = ctrl->id;
-                set_ctrl.event = VIRTIO_CONSOLE_PORT_OPEN;
-                set_ctrl.value = 1;
-
-            #ifdef RT_USING_SMP
-                rt_spin_unlock_irqrestore(&virtio_dev->spinlock, level);
-            #endif
-
-                virtio_console_send_ctrl(virtio_console_dev, &set_ctrl);
-
-            #ifdef RT_USING_SMP
-                level = rt_spin_lock_irqsave(&virtio_dev->spinlock);
-            #endif
+                rt_thread_resume(virtio_thread);
             }
-            break;
+        }
+        break;
         case VIRTIO_CONSOLE_PORT_NAME:
             break;
         default:
             rt_kprintf("%s: Unsupport ctrl[id: %d, event: %d, value: %d]!\n",
-                    dev_name, ctrl->id, ctrl->event, ctrl->value);
+                       dev_name, ctrl->id, ctrl->event, ctrl->value);
             break;
         }
 
@@ -631,9 +641,9 @@ static void virtio_console_isr(int irqno, void *param)
 
             if (port_dev->rx_notify)
             {
-            #ifdef RT_USING_SMP
+#ifdef RT_USING_SMP
                 rt_spin_unlock_irqrestore(&port_dev->spinlock_rx, level);
-            #endif
+#endif
                 /* Will call virtio_console_port_read to inc used_idx */
 
                 if (port_dev->parent.rx_indicate != RT_NULL)
@@ -646,9 +656,9 @@ static void virtio_console_isr(int irqno, void *param)
                     port_dev->rx_notify_helper.notify(port_dev->rx_notify_helper.dev);
                 }
 
-            #ifdef RT_USING_SMP
+#ifdef RT_USING_SMP
                 level = rt_spin_lock_irqsave(&port_dev->spinlock_rx);
-            #endif
+#endif
             }
             else
             {
@@ -698,8 +708,8 @@ rt_err_t rt_virtio_console_init(rt_ubase_t *mmio_base, rt_uint32_t irq)
     virtio_status_acknowledge_driver(virtio_dev);
 
     virtio_dev->mmio_config->driver_features = virtio_dev->mmio_config->device_features & ~(
-            (1 << VIRTIO_F_RING_EVENT_IDX) |
-            (1 << VIRTIO_F_RING_INDIRECT_DESC));
+                                                                                              (1 << VIRTIO_F_RING_EVENT_IDX) |
+                                                                                              (1 << VIRTIO_F_RING_INDIRECT_DESC));
 
     virtio_status_driver_ok(virtio_dev);
 
@@ -742,14 +752,14 @@ rt_err_t rt_virtio_console_init(rt_ubase_t *mmio_base, rt_uint32_t irq)
 
     virtio_console_dev->parent.type = RT_Device_Class_Char;
 #ifdef RT_USING_DEVICE_OPS
-    virtio_console_dev->parent.ops  = &virtio_console_ops;
+    virtio_console_dev->parent.ops = &virtio_console_ops;
 #else
-    virtio_console_dev->parent.init     = virtio_console_init;
-    virtio_console_dev->parent.open     = RT_NULL;
-    virtio_console_dev->parent.close    = RT_NULL;
-    virtio_console_dev->parent.read     = RT_NULL;
-    virtio_console_dev->parent.write    = RT_NULL;
-    virtio_console_dev->parent.control  = virtio_console_control;
+    virtio_console_dev->parent.init = virtio_console_init;
+    virtio_console_dev->parent.open = RT_NULL;
+    virtio_console_dev->parent.close = RT_NULL;
+    virtio_console_dev->parent.read = RT_NULL;
+    virtio_console_dev->parent.write = RT_NULL;
+    virtio_console_dev->parent.control = virtio_console_control;
 #endif
 
     virtio_console_dev->parent.rx_indicate = RT_NULL;

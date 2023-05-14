@@ -1,0 +1,16 @@
+from building import *
+
+cwd     = GetCurrentDir()
+src     = []
+
+if GetDepend(['RT_USING_DM']):
+    src += ['bus.c']
+    src += ['platform.c']
+
+src += ['device.c']
+src += ['driver.c']
+
+CPPPATH = [cwd]
+group   = DefineGroup('bus_core', src, depend = [], CPPPATH = CPPPATH)
+ 
+Return('group')

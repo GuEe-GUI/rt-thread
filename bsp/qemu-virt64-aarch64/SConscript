@@ -12,3 +12,4 @@ for d in list:
         objs = objs + SConscript(os.path.join(d, 'SConscript'))
 
 Return('objs')
+ 

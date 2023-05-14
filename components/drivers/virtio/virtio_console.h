@@ -87,6 +87,7 @@ struct virtio_console_device
 };
 
 rt_err_t rt_virtio_console_init(rt_ubase_t *mmio_base, rt_uint32_t irq);
+rt_err_t virtio_console_port_create(struct virtio_console_device *virtio_console_dev);
 
 enum
 {

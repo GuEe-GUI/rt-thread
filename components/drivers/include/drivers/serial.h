@@ -15,6 +15,7 @@
 #define __SERIAL_H__
 
 #include <rtthread.h>
+#include <drivers/core/device.h>
 
 #define BAUD_RATE_2400                  2400
 #define BAUD_RATE_4800                  4800
@@ -146,7 +147,10 @@ struct rt_serial_device
 {
     struct rt_device          parent;
 
+#ifndef RT_USING_DM
     const struct rt_uart_ops *ops;
+#endif
+
     struct serial_configure   config;
 
     void *serial_rx;
@@ -160,7 +164,7 @@ typedef struct rt_serial_device rt_serial_t;
  * uart operators
  */
 struct rt_uart_ops
-{
+{   
     rt_err_t (*configure)(struct rt_serial_device *serial, struct serial_configure *cfg);
     rt_err_t (*control)(struct rt_serial_device *serial, int cmd, void *arg);
 
@@ -168,6 +172,9 @@ struct rt_uart_ops
     int (*getc)(struct rt_serial_device *serial);
 
     rt_ssize_t (*dma_transmit)(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, int direction);
+
+    struct rt_serial_device* (*device_create) (struct rt_device *dev);
+    void (*device_destory) (rt_device_t dev);
 };
 
 void rt_hw_serial_isr(struct rt_serial_device *serial, int event);
@@ -176,5 +183,21 @@ rt_err_t rt_hw_serial_register(struct rt_serial_device *serial,
                                const char              *name,
                                rt_uint32_t              flag,
                                void                    *data);
+
+struct rt_uart_driver
+{
+    struct rt_driver parent;      
+#ifdef RT_USING_DEVICE_OPS
+    struct rt_uart_ops *ops;
+#else
+    // rt_device_t (*device_create) (int type, int attach_size);
+    // void (*device_destory) (rt_device_t dev);
+    rt_err_t (*configure)(struct rt_serial_device *serial, struct serial_configure *cfg);
+    rt_err_t (*control)(struct rt_serial_device *serial, int cmd, void *arg);
+
+    int (*putc)(struct rt_serial_device *serial, char c);
+    int (*getc)(struct rt_serial_device *serial);
+#endif
+};
 
 #endif

@@ -14,6 +14,8 @@
 
 #include <rthw.h>
 #include <rtdef.h>
+#include <drivers/core/driver.h>
+#include <drivers/core/device.h>
 
 #ifdef RT_USING_SMART
 #include <mmu.h>
@@ -30,6 +32,37 @@
 
 #include <virtio_mmio.h>
 #include <virtio_queue.h>
+#include <drivers/core/rtdm.h>
+
+#define VIRTO_CONSOLE_NAME "virtio_console"
+
+#define VIRTIO_DRIVER_EXPORT(driver) RT_DRIVER_EXPORT(driver, virtio, BUILIN)
+
+struct rt_virtio_ops
+{
+    rt_device_t (*device_create) (struct rt_device *dev);
+    void (*device_destory) (rt_device_t dev);
+};
+
+struct rt_virtio_driver
+{
+    struct rt_driver parent;      
+#ifdef RT_USING_DEVICE_OPS
+    struct rt_virtio_ops *ops;
+#else
+    rt_device_t (*device_create) ();
+    void (*device_destory) (rt_device_t dev);
+#endif
+};
+
+struct hw_virtio_device
+{
+    rt_ubase_t hw_base;
+    rt_uint32_t irqno;
+    rt_uint32_t id;
+};
+
+rt_thread_t virtio_thread_self();
 
 #define VIRTIO_MAGIC_VALUE          0x74726976 /* "virt" */
 
@@ -151,5 +184,7 @@ rt_err_t virtio_alloc_desc_chain(struct virtio_device *dev, rt_uint32_t queue_in
 void virtio_free_desc_chain(struct virtio_device *dev, rt_uint32_t queue_index, rt_uint16_t desc_index);
 void virtio_fill_desc(struct virtio_device *dev, rt_uint32_t queue_index, rt_uint16_t desc_index,
         rt_uint64_t addr, rt_uint32_t len, rt_uint16_t flags, rt_uint16_t next);
+
+rt_err_t rt_virtio_driver_register(struct rt_virtio_driver *drv);
 
 #endif /* __VIRTIO_H__ */

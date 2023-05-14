@@ -1,21 +1,9 @@
-/*
- * Copyright (c) 2006-2021, RT-Thread Development Team
- *
- * SPDX-License-Identifier: Apache-2.0
- *
- * Change Logs:
- * Date           Author         Notes
- * 2021-11-4      GuEe-GUI       first version
- */
-
 #include <rtthread.h>
 #include <rtdevice.h>
 #include <sys/time.h>
 #include <board.h>
 
-#include "drv_rtc.h"
-
-#ifdef BSP_USING_RTC
+#include "drivers/amba_bus.h"
 
 #define RTC_DR      0x00    /* data read register */
 #define RTC_MR      0x04    /* match register */
@@ -29,17 +17,22 @@
 #define RTC_CR_OPEN     1
 #define RTC_CR_CLOSE    0
 
+struct hw_rtc_device
+{
+    struct rt_device device;
+    rt_ubase_t hw_base;
+};
+
 static struct hw_rtc_device rtc_device;
-static rt_ubase_t pl031_rtc_base = PL031_RTC_BASE;
 
 rt_inline rt_uint32_t pl031_read32(rt_ubase_t offset)
 {
-    return (*((volatile unsigned int *)(pl031_rtc_base + offset)));
+    return (*((volatile unsigned int *)(rtc_device.hw_base + offset)));
 }
 
 rt_inline void pl031_write32(rt_ubase_t offset, rt_uint32_t value)
 {
-    (*((volatile unsigned int *)(pl031_rtc_base + offset))) = value;
+    (*((volatile unsigned int *)(rtc_device.hw_base + offset))) = value;
 }
 
 static rt_err_t pl031_rtc_init(rt_device_t dev)
@@ -90,7 +83,7 @@ static rt_ssize_t pl031_rtc_write(rt_device_t dev, rt_off_t pos, const void *buf
     return size;
 }
 
-const static struct rt_device_ops pl031_rtc_ops =
+static struct rt_device_ops pl031_ops =
 {
     .init = pl031_rtc_init,
     .open = pl031_rtc_open,
@@ -100,24 +93,50 @@ const static struct rt_device_ops pl031_rtc_ops =
     .control = pl031_rtc_control
 };
 
-int rt_hw_rtc_init(void)
+int pl031_probe(struct rt_device *dev)
 {
-#ifdef RT_USING_LWP
-    pl031_rtc_base = (rt_size_t)rt_ioremap((void *)pl031_rtc_base, PL031_RTC_SIZE);
-#endif
+    size_t reg_range = 0;
+    void *reg_addr = RT_NULL;
 
-    rt_memset(&rtc_device, 0, sizeof(rtc_device));
+    struct dtb_node *node = (struct dtb_node *)(dev->dtb_node);
 
-    rtc_device.device.type        = RT_Device_Class_RTC;
-    rtc_device.device.rx_indicate = RT_NULL;
-    rtc_device.device.tx_complete = RT_NULL;
-    rtc_device.device.ops         = &pl031_rtc_ops;
-    rtc_device.device.user_data   = RT_NULL;
+    if (node)
+    {
+        reg_addr = (void *)dtb_node_get_addr_size(node, "reg", &reg_range);
+        if ((reg_addr) && (reg_range != 0))
+        {
+            rtc_device.hw_base = (rt_base_t)rt_ioremap(reg_addr, reg_range);
+        }
 
-    /* register a rtc device */
-    rt_device_register(&rtc_device.device, "rtc", RT_DEVICE_FLAG_RDWR);
+        rt_memset(&rtc_device, 0, sizeof(rtc_device));
+        struct rt_device_ops *ops = ((struct rt_rtc_driver *)(dev->drv))->ops;
+
+        rtc_device.device.type        = RT_Device_Class_RTC;
+        rtc_device.device.rx_indicate = RT_NULL;
+        rtc_device.device.tx_complete = RT_NULL;
+        rtc_device.device.ops         = ops;
+        rtc_device.device.user_data   = RT_NULL;
+
+        /* register a rtc device */
+        rt_device_register(&rtc_device.device, dev->drv->name, RT_DEVICE_FLAG_RDWR);
+    }
 
     return 0;
 }
-INIT_DEVICE_EXPORT(rt_hw_rtc_init);
-#endif /* BSP_USING_RTC */
+
+struct rt_device_id pl031_ids[] =
+    {
+        {.compatible = "arm,pl031"},
+        {/* sentinel */}};
+
+struct rt_rtc_driver pl031_drv = {
+    .parent = {
+        .name = "pl031_rtc",
+        .probe = pl031_probe,
+        .ids = pl031_ids,
+    },
+    .ops = &pl031_ops,
+};
+
+AMBA_DRIVER_EXPORT(pl031_drv);
+

@@ -78,6 +78,23 @@ struct rt_pin_ops
     rt_base_t (*pin_get)(const char *name);
 };
 
+struct rt_pin_driver
+{
+    struct rt_driver parent;      
+#ifdef RT_USING_DEVICE_OPS
+    struct rt_pin_ops *ops;
+#else
+    void (*pin_mode)(struct rt_device *device, rt_base_t pin, rt_uint8_t mode);
+    void (*pin_write)(struct rt_device *device, rt_base_t pin, rt_uint8_t value);
+    rt_int8_t  (*pin_read)(struct rt_device *device, rt_base_t pin);
+    rt_err_t (*pin_attach_irq)(struct rt_device *device, rt_base_t pin,
+            rt_uint8_t mode, void (*hdr)(void *args), void *args);
+    rt_err_t (*pin_detach_irq)(struct rt_device *device, rt_base_t pin);
+    rt_err_t (*pin_irq_enable)(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled);
+    rt_base_t (*pin_get)(const char *name);
+#endif
+};
+
 int rt_device_pin_register(const char *name, const struct rt_pin_ops *ops, void *user_data);
 void rt_pin_mode(rt_base_t pin, rt_uint8_t mode);
 void rt_pin_write(rt_base_t pin, rt_uint8_t value);

@@ -24,7 +24,7 @@ static int console_init()
     if (device != RT_NULL && rt_device_open(device, 0) == RT_EOK)
     {
         /* Create vport0p1 */
-        status = rt_device_control(device, VIRTIO_DEVICE_CTRL_CONSOLE_PORT_CREATE, RT_NULL);
+        // status = rt_device_control(device, VIRTIO_DEVICE_CTRL_CONSOLE_PORT_CREATE, RT_NULL);
     }
 
     if (device != RT_NULL)

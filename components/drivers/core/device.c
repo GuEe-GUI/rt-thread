@@ -16,6 +16,9 @@
  */
 
 #include <rtthread.h>
+#include <drivers/core/platform.h>
+#include <drivers/core/bus.h>
+
 #ifdef RT_USING_POSIX_DEVIO
 #include <rtdevice.h> /* for wqueue_init */
 #endif /* RT_USING_POSIX_DEVIO */
@@ -495,10 +498,8 @@ RTM_EXPORT(rt_device_bind_driver);
 rt_device_t rt_device_create_since_driver(rt_driver_t drv,int device_id)
 {
     rt_device_t device;
-    if (!drv)
-    {
-        return RT_NULL;
-    }
+
+    RT_ASSERT(drv != RT_NULL);
 
     device = (rt_device_t)rt_calloc(1,drv->device_size);
     if(device == RT_NULL)
@@ -517,27 +518,45 @@ RTM_EXPORT(rt_device_create_since_driver);
  * @param device the pointer of rt_device structure
  * @return the error code, RT_EOK on successfully.
  */
-rt_err_t rt_device_probe_and_init(rt_device_t device)
+rt_err_t rt_device_probe_and_init(rt_device_t dev)
 {
     int ret = -RT_ERROR;
-    if (!device)
+
+    RT_ASSERT(dev != RT_NULL);
+    RT_ASSERT(dev->drv != RT_NULL);
+
+    if(dev->drv->probe)
     {
-        return -RT_EINVAL;
+        ret = dev->drv->probe((rt_device_t)dev);
     }
-    if(!device->drv)
+    if(dev->drv->probe_init)
     {
-        return -RT_ERROR;
-    }
-    if(device->drv->probe)
-    {
-        ret = device->drv->probe((rt_device_t)device);
-    }
-    if(device->drv->probe_init)
-    {
-        ret = device->drv->probe_init((rt_device_t)device);
+        ret = dev->drv->probe_init((rt_device_t)dev);
     }
     return ret;
 }
 RTM_EXPORT(rt_device_probe_and_init);
+
+/**
+ *  @brief This function attach a device to bus
+ *  @param dev the device to be registered
+ */
+void rt_device_attach(struct rt_device *dev)
+{
+    RT_ASSERT(dev != RT_NULL);
+    
+    struct rt_bus *platform_bus = RT_NULL;
+
+    rt_list_init(&(dev->node));
+
+    platform_bus = rt_bus_find_by_name("platform");
+
+    if (platform_bus)
+    {
+        rt_bus_add_device(platform_bus, dev);
+    }
+}
+
 #endif /* RT_USING_DM */
+
 #endif /* RT_USING_DEVICE */

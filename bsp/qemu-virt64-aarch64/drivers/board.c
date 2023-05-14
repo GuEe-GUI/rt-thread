@@ -12,8 +12,8 @@
  */
 
 #include <rthw.h>
-#include <rtthread.h>
 #include <mmu.h>
+#include <drivers/core/platform.h>
 
 #ifdef RT_USING_SMART
 #include <lwp_arch.h>
@@ -98,23 +98,17 @@ void rt_hw_board_init(void)
     /* initialize hardware interrupt */
     rt_hw_interrupt_init();
 
-    /* support debug feature before components init */
-    rt_hw_uart_init();
-    rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
+    rt_components_board_init();
 
 #ifdef RT_USING_FDT
-    // TODO 0x44000000 should be replace by a variable
-    void * fdt_start = (void *)0x44000000 - PV_OFFSET;
-    device_tree_setup(fdt_start);
-
 #ifdef RT_USING_SMP
     rt_hw_cpu_init();
 #else
     psci_init();
 #endif /* RT_USING_SMP */
 #endif
-
-    rt_components_board_init();
+    
+    rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
 
     rt_thread_idle_sethook(idle_wfi);
 
@@ -122,4 +116,14 @@ void rt_hw_board_init(void)
     /* install IPI handle */
     rt_hw_ipi_handler_install(RT_SCHEDULE_IPI, rt_scheduler_ipi_handler);
 #endif
+}
+
+void rt_hw_console_output(const char *str)
+{
+    /* empty console output */
+    while (*str)
+    {
+        while (UART_FR(UART_BASE_ADDR) & UARTFR_TXFF);
+        UART_DR(UART_BASE_ADDR) = *str++;
+    }
 }

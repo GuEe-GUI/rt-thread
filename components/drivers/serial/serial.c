@@ -234,9 +234,15 @@ rt_inline int _serial_poll_rx(struct rt_serial_device *serial, rt_uint8_t *data,
     RT_ASSERT(serial != RT_NULL);
     size = length;
 
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif   
+
     while (length)
     {
-        ch = serial->ops->getc(serial);
+        ch = ops->getc(serial);
         if (ch == -1) break;
 
         *data = ch;
@@ -259,16 +265,23 @@ rt_inline int _serial_poll_tx(struct rt_serial_device *serial, const rt_uint8_t 
     size = length;
     while (length)
     {
+
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif
+        
         /*
          * to be polite with serial console add a line feed
          * to the carriage return character
          */
         if (*data == '\n' && (serial->parent.open_flag & RT_DEVICE_FLAG_STREAM))
         {
-            serial->ops->putc(serial, '\r');
+            ops->putc(serial, '\r');
         }
 
-        serial->ops->putc(serial, *data);
+        ops->putc(serial, *data);
 
         ++ data;
         -- length;
@@ -341,20 +354,25 @@ rt_inline int _serial_int_tx(struct rt_serial_device *serial, const rt_uint8_t *
 
     while (length)
     {
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif
         /*
          * to be polite with serial console add a line feed
          * to the carriage return character
          */
         if (*data == '\n' && (serial->parent.open_flag & RT_DEVICE_FLAG_STREAM))
         {
-            if (serial->ops->putc(serial, '\r') == -1)
+            if (ops->putc(serial, '\r') == -1)
             {
                 rt_completion_wait(&(tx->completion), RT_WAITING_FOREVER);
                 continue;
             }
         }
 
-        if (serial->ops->putc(serial, *(char*)data) == -1)
+        if (ops->putc(serial, *(char*)data) == -1)
         {
             rt_completion_wait(&(tx->completion), RT_WAITING_FOREVER);
             continue;
@@ -507,11 +525,17 @@ rt_inline int _serial_dma_rx(struct rt_serial_device *serial, rt_uint8_t *data, 
         rx_dma = (struct rt_serial_rx_dma*)serial->serial_rx;
         RT_ASSERT(rx_dma != RT_NULL);
 
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif
+
         if (rx_dma->activated != RT_TRUE)
         {
             rx_dma->activated = RT_TRUE;
-            RT_ASSERT(serial->ops->dma_transmit != RT_NULL);
-            serial->ops->dma_transmit(serial, data, length, RT_SERIAL_DMA_RX);
+            RT_ASSERT(ops->dma_transmit != RT_NULL);
+            ops->dma_transmit(serial, data, length, RT_SERIAL_DMA_RX);
         }
         else result = -RT_EBUSY;
         rt_hw_interrupt_enable(level);
@@ -565,8 +589,13 @@ rt_inline int _serial_dma_tx(struct rt_serial_device *serial, const rt_uint8_t *
             tx_dma->activated = RT_TRUE;
             rt_hw_interrupt_enable(level);
 
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif
             /* make a DMA transfer */
-            serial->ops->dma_transmit(serial, (rt_uint8_t *)data, length, RT_SERIAL_DMA_TX);
+            ops->dma_transmit(serial, (rt_uint8_t *)data, length, RT_SERIAL_DMA_TX);
         }
         else
         {
@@ -601,9 +630,15 @@ static rt_err_t rt_serial_init(struct rt_device *dev)
 
     rt_memset(&serial->rx_notify, 0, sizeof(struct rt_device_notify));
 
+#ifdef RT_USING_DM
+        const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+        const struct rt_uart_ops *ops = serial->ops;
+#endif
+
     /* apply configuration */
-    if (serial->ops->configure)
-        result = serial->ops->configure(serial, &serial->config);
+    if (ops->configure)
+        result = ops->configure(serial, &serial->config);
 
     return result;
 }
@@ -635,6 +670,12 @@ static rt_err_t rt_serial_open(struct rt_device *dev, rt_uint16_t oflag)
     /* get open flags */
     dev->open_flag = oflag & 0xff;
 
+#ifdef RT_USING_DM
+            const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+            const struct rt_uart_ops *ops = serial->ops;
+#endif   
+
     /* initialize the Rx/Tx structure according to open flag */
     if (serial->serial_rx == RT_NULL)
     {
@@ -653,8 +694,8 @@ static rt_err_t rt_serial_open(struct rt_device *dev, rt_uint16_t oflag)
 
             serial->serial_rx = rx_fifo;
             dev->open_flag |= RT_DEVICE_FLAG_INT_RX;
-            /* configure low level device */
-            serial->ops->control(serial, RT_DEVICE_CTRL_SET_INT, (void *)RT_DEVICE_FLAG_INT_RX);
+            /* configure low level device */         
+            ops->control(serial, RT_DEVICE_CTRL_SET_INT, (void *)RT_DEVICE_FLAG_INT_RX);
         }
 #ifdef RT_SERIAL_USING_DMA
         else if (oflag & RT_DEVICE_FLAG_DMA_RX)
@@ -680,7 +721,7 @@ static rt_err_t rt_serial_open(struct rt_device *dev, rt_uint16_t oflag)
                 rx_fifo->is_full = RT_FALSE;
                 serial->serial_rx = rx_fifo;
                 /* configure fifo address and length to low level device */
-                serial->ops->control(serial, RT_DEVICE_CTRL_CONFIG, (void *) RT_DEVICE_FLAG_DMA_RX);
+                ops->control(serial, RT_DEVICE_CTRL_CONFIG, (void *) RT_DEVICE_FLAG_DMA_RX);
             }
             dev->open_flag |= RT_DEVICE_FLAG_DMA_RX;
         }
@@ -714,7 +755,7 @@ static rt_err_t rt_serial_open(struct rt_device *dev, rt_uint16_t oflag)
 
             dev->open_flag |= RT_DEVICE_FLAG_INT_TX;
             /* configure low level device */
-            serial->ops->control(serial, RT_DEVICE_CTRL_SET_INT, (void *)RT_DEVICE_FLAG_INT_TX);
+            ops->control(serial, RT_DEVICE_CTRL_SET_INT, (void *)RT_DEVICE_FLAG_INT_TX);
         }
 #ifdef RT_SERIAL_USING_DMA
         else if (oflag & RT_DEVICE_FLAG_DMA_TX)
@@ -730,7 +771,7 @@ static rt_err_t rt_serial_open(struct rt_device *dev, rt_uint16_t oflag)
 
             dev->open_flag |= RT_DEVICE_FLAG_DMA_TX;
             /* configure low level device */
-            serial->ops->control(serial, RT_DEVICE_CTRL_CONFIG, (void *)RT_DEVICE_FLAG_DMA_TX);
+            ops->control(serial, RT_DEVICE_CTRL_CONFIG, (void *)RT_DEVICE_FLAG_DMA_TX);
         }
 #endif /* RT_SERIAL_USING_DMA */
         else
@@ -764,12 +805,18 @@ static rt_err_t rt_serial_close(struct rt_device *dev)
     /* this device has more reference count */
     if (dev->ref_count > 1) return RT_EOK;
 
+#ifdef RT_USING_DM
+            const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+            const struct rt_uart_ops *ops = serial->ops;
+#endif   
+
     if (dev->open_flag & RT_DEVICE_FLAG_INT_RX)
     {
         struct rt_serial_rx_fifo* rx_fifo;
 
         /* configure low level device */
-        serial->ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void*)RT_DEVICE_FLAG_INT_RX);
+        ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void*)RT_DEVICE_FLAG_INT_RX);
         dev->open_flag &= ~RT_DEVICE_FLAG_INT_RX;
 
         rx_fifo = (struct rt_serial_rx_fifo*)serial->serial_rx;
@@ -783,7 +830,7 @@ static rt_err_t rt_serial_close(struct rt_device *dev)
     else if (dev->open_flag & RT_DEVICE_FLAG_DMA_RX)
     {
         /* configure low level device */
-        serial->ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void *) RT_DEVICE_FLAG_DMA_RX);
+        ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void *) RT_DEVICE_FLAG_DMA_RX);
         dev->open_flag &= ~RT_DEVICE_FLAG_DMA_RX;
 
         if (serial->config.bufsz == 0)
@@ -813,7 +860,7 @@ static rt_err_t rt_serial_close(struct rt_device *dev)
     {
         struct rt_serial_tx_fifo* tx_fifo;
 
-        serial->ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void*)RT_DEVICE_FLAG_INT_TX);
+        ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void*)RT_DEVICE_FLAG_INT_TX);
         dev->open_flag &= ~RT_DEVICE_FLAG_INT_TX;
 
         tx_fifo = (struct rt_serial_tx_fifo*)serial->serial_tx;
@@ -830,7 +877,7 @@ static rt_err_t rt_serial_close(struct rt_device *dev)
         struct rt_serial_tx_dma* tx_dma;
 
         /* configure low level device */
-        serial->ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void *) RT_DEVICE_FLAG_DMA_TX);
+        ops->control(serial, RT_DEVICE_CTRL_CLR_INT, (void *) RT_DEVICE_FLAG_DMA_TX);
         dev->open_flag &= ~RT_DEVICE_FLAG_DMA_TX;
 
         tx_dma = (struct rt_serial_tx_dma*)serial->serial_tx;
@@ -844,7 +891,7 @@ static rt_err_t rt_serial_close(struct rt_device *dev)
     }
 #endif /* RT_SERIAL_USING_DMA */
 
-    serial->ops->control(serial, RT_DEVICE_CTRL_CLOSE, RT_NULL);
+    ops->control(serial, RT_DEVICE_CTRL_CLOSE, RT_NULL);
     dev->flag &= ~RT_DEVICE_FLAG_ACTIVATED;
 
     return RT_EOK;
@@ -966,6 +1013,12 @@ static void _tc_flush(struct rt_serial_device *serial, int queue)
     device = &(serial->parent);
     rx_fifo = (struct rt_serial_rx_fifo *) serial->serial_rx;
 
+#ifdef RT_USING_DM
+            const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+            const struct rt_uart_ops *ops = serial->ops;
+#endif   
+
     switch(queue)
     {
         case TCIFLUSH:
@@ -985,7 +1038,7 @@ static void _tc_flush(struct rt_serial_device *serial, int queue)
             {
                 while (1)
                 {
-                    ch = serial->ops->getc(serial);
+                    ch = ops->getc(serial);
                     if (ch == -1) break;
                 }
             }
@@ -1008,6 +1061,12 @@ static rt_err_t rt_serial_control(struct rt_device *dev,
 
     RT_ASSERT(dev != RT_NULL);
     serial = (struct rt_serial_device *)dev;
+
+#ifdef RT_USING_DM
+            const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+            const struct rt_uart_ops *ops = serial->ops;
+#endif   
 
     switch (cmd)
     {
@@ -1035,7 +1094,7 @@ static rt_err_t rt_serial_control(struct rt_device *dev,
                 if (serial->parent.ref_count)
                 {
                     /* serial device has been opened, to configure it */
-                    serial->ops->configure(serial, (struct serial_configure *) args);
+                    ops->configure(serial, (struct serial_configure *) args);
                 }
             }
             break;
@@ -1131,7 +1190,7 @@ static rt_err_t rt_serial_control(struct rt_device *dev,
                 }
                 else config.parity = PARITY_NONE;
 
-                serial->ops->configure(serial, &config);
+                ops->configure(serial, &config);
             }
             break;
         case TCFLSH:
@@ -1251,7 +1310,7 @@ static rt_err_t rt_serial_control(struct rt_device *dev,
 #endif /* RT_USING_POSIX_STDIO */
         default :
             /* control device */
-            ret = serial->ops->control(serial, cmd, args);
+            ret = ops->control(serial, cmd, args);
             break;
     }
 
@@ -1314,6 +1373,11 @@ rt_err_t rt_hw_serial_register(struct rt_serial_device *serial,
 /* ISR for serial interrupt */
 void rt_hw_serial_isr(struct rt_serial_device *serial, int event)
 {
+#ifdef RT_USING_DM
+            const struct rt_uart_ops *ops = ((struct rt_uart_driver *)(serial->parent.drv))->ops;
+#else
+            const struct rt_uart_ops *ops = serial->ops;
+#endif   
     switch (event & 0xff)
     {
         case RT_SERIAL_EVENT_RX_IND:
@@ -1328,7 +1392,7 @@ void rt_hw_serial_isr(struct rt_serial_device *serial, int event)
 
             while (1)
             {
-                ch = serial->ops->getc(serial);
+                ch = ops->getc(serial);
                 if (ch == -1) break;
 
 
@@ -1398,7 +1462,7 @@ void rt_hw_serial_isr(struct rt_serial_device *serial, int event)
             {
                 /* transmit next data node */
                 tx_dma->activated = RT_TRUE;
-                serial->ops->dma_transmit(serial, (rt_uint8_t *)data_ptr, data_size, RT_SERIAL_DMA_TX);
+                ops->dma_transmit(serial, (rt_uint8_t *)data_ptr, data_size, RT_SERIAL_DMA_TX);
             }
             else
             {

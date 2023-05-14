@@ -27,6 +27,9 @@
 #include <rtdef.h>
 #include <rtservice.h>
 #include <rtm.h>
+#include <drivers/core/device.h>
+#include <drivers/core/driver.h>
+
 #ifdef RT_USING_LEGACY
 #include <rtlegacy.h>
 #endif

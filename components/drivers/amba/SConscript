@@ -1,0 +1,12 @@
+from building import *
+
+cwd     = GetCurrentDir()
+src     = []
+CPPPATH = [cwd]
+
+if GetDepend(['RT_USING_DM']):
+    src     = Glob('*.c')
+
+group   = DefineGroup('amba_bus', src, depend = [], CPPPATH = CPPPATH)
+
+Return('group')

@@ -1,21 +1,14 @@
-/*
- * Copyright (c) 2006-2022, RT-Thread Development Team
- *
- * SPDX-License-Identifier: Apache-2.0
- *
- * Change Logs:
- * Date           Author         Notes
- * 2022-6-30      GuEe-GUI       first version
- */
-
-#include <rthw.h>
 #include <rtthread.h>
 #include <rtdevice.h>
-#include <board.h>
+#include <rtdef.h>
+#include <rthw.h>
 
-#include "drv_gpio.h"
+#include "board.h"
+#include "drivers/amba_bus.h"
 
-#ifdef BSP_USING_PIN
+#ifdef RT_USING_FDT
+#include "dtb_node.h"
+#endif
 
 #define GPIODIR 0x400
 #define GPIOIS  0x404
@@ -26,7 +19,7 @@
 #define GPIOMIS 0x418
 #define GPIOIC  0x41c
 
-#define BIT(x)  (1UL << (x))
+#define BIT(x)  (1 << (x))
 
 #define PL061_GPIO_NR   8
 
@@ -37,18 +30,18 @@ static struct pl061
 #endif
     void (*(hdr[PL061_GPIO_NR]))(void *args);
     void *args[PL061_GPIO_NR];
+    rt_ubase_t hw_base;
+    rt_uint32_t irqno;
 } _pl061;
-
-static rt_ubase_t pl061_gpio_base = PL061_GPIO_BASE;
 
 rt_inline rt_uint8_t pl061_read8(rt_ubase_t offset)
 {
-    return HWREG8(pl061_gpio_base + offset);
+    return HWREG8(_pl061.hw_base + offset);
 }
 
 rt_inline void pl061_write8(rt_ubase_t offset, rt_uint8_t value)
 {
-    HWREG8(pl061_gpio_base + offset) = value;
+    HWREG8(_pl061.hw_base + offset) = value;
 }
 
 static void pl061_pin_mode(struct rt_device *device, rt_base_t pin, rt_uint8_t mode)
@@ -248,7 +241,7 @@ static rt_err_t pl061_pin_irq_enable(struct rt_device *device, rt_base_t pin, rt
     return RT_EOK;
 }
 
-static const struct rt_pin_ops ops =
+static struct rt_pin_ops pl061_ops =
 {
     pl061_pin_mode,
     pl061_pin_write,
@@ -299,22 +292,49 @@ static void rt_hw_gpio_isr(int irqno, void *param)
 #endif
 }
 
-int rt_hw_gpio_init(void)
+int pl061_probe(struct rt_device *dev)
 {
+    size_t reg_range = 0;
+    void *reg_addr = RT_NULL;
+
+    struct dtb_node *node = (struct dtb_node *)(dev->dtb_node);
+
 #ifdef RT_USING_SMP
     rt_spin_lock_init(&_pl061.spinlock);
 #endif
 
-#ifdef RT_USING_LWP
-    pl061_gpio_base = (rt_size_t)rt_ioremap((void *)pl061_gpio_base, PL061_GPIO_SIZE);
-#endif
+    if (node)
+    {
+        reg_addr = (void *)dtb_node_get_addr_size(node, "reg", &reg_range);
+        if ((reg_addr) && (reg_range != 0))
+        {
+            _pl061.hw_base = (rt_base_t)rt_ioremap(reg_addr, reg_range);
+        }
 
-    rt_device_pin_register("gpio", &ops, RT_NULL);
-    rt_hw_interrupt_install(PL061_GPIO_IRQNUM, rt_hw_gpio_isr, RT_NULL, "gpio");
-    rt_hw_interrupt_umask(PL061_GPIO_IRQNUM);
+        _pl061.irqno = dtb_node_irq_get(node, 0) + IRQ_SPI_OFFSET;
 
-    return 0;
+        struct rt_pin_ops *ops = ((struct rt_pin_driver *)(dev->drv))->ops;
+
+        rt_device_pin_register(dev->drv->name, ops, RT_NULL);
+        rt_hw_interrupt_install(_pl061.irqno, rt_hw_gpio_isr, RT_NULL, dev->drv->name);
+        rt_hw_interrupt_umask(_pl061.irqno);
+    }
+
+    return RT_EOK;
 }
-INIT_DEVICE_EXPORT(rt_hw_gpio_init);
 
-#endif /* BSP_USING_PIN */
+struct rt_device_id pl061_ids[] =
+    {
+        {.compatible = "arm,pl061"},
+        {/* sentinel */}};
+
+struct rt_pin_driver pl061_drv = {
+    .parent = {
+        .name = "pl061_gpio",
+        .probe = pl061_probe,
+        .ids = pl061_ids,
+    },
+    .ops = &pl061_ops,
+};
+
+AMBA_DRIVER_EXPORT(pl061_drv);

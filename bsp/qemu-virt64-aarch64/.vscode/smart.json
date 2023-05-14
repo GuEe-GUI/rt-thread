@@ -1,13 +1,20 @@
 {
     "env": {
-        
+        "windows": {
+            "VENV_MODE": true,
+            "QEMU_IMG_DIR": "D:\\repository\\env\\tools\\qemu",
+            "QEMU_DIR": "D:\\RT-ThreadStudio\\repo\\Extract\\Debugger_Support_Packages\\RealThread\\QEMU\\4.2.0.4",
+            "PATH": "%PATH%;%QEMU_IMG_DIR%;%QEMU_DIR%"
+        },
+        "linux": {},
+        "common": {}
     },
     "statusBarItem": {
         "build": {
             "icon": "$(zap)",
             "enable": true,
             "commands": [
-                "scons"
+                "scons -j12"
             ],
             "label": "编译",
             "tooltip": "编译 RT-Thread 内核"
@@ -21,14 +28,26 @@
             "label": "清理",
             "tooltip": "清理 RT-Thread 内核"
         },
-        "name" : {
-            "icon" : "$(location)",
-            "enable" : true,
-            "commands" : [
-                ""
+        "qemu-run": {
+            "enable": true,
+            "commands": [
+                "qemu.bat"
             ],
-            "label" : "QEMU Virt AArch64",
-            "tooltip" : "项目名称"
+            "label": "运行",
+            "tooltip": "使用 QEMU 模拟器运行",
+            "icon": "$(run)"
+        },
+        "build-s": {
+            "enable": true,
+            "commands": [
+                "scons"
+            ],
+            "label": "编译-单线程",
+            "tooltip": "编译 RT-Thread 内核",
+            "icon": "$(zap)"
         }
+    },
+    "home": {
+        "show": true
     }
 }
