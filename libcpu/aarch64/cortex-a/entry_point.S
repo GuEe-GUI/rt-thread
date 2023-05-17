@@ -1,21 +1,78 @@
 /*
- * Copyright (c) 2006-2020, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Date           Author       Notes
  * 2020-01-15     bigmagic     the first version
  * 2020-08-10     SummerGift   support clang compiler
+ * 2023-04-29     GuEe-GUI     support kernel's ARM64 boot header
  */
 
 #include "rtconfig.h"
-.section ".text.entrypoint","ax"
-.global __start
 
-__start:
-#ifdef ARCH_ARM_BOOTWITH_FLUSH_CACHE
-    bl      __asm_flush_dcache_all
+#define ARM64_IMAGE_FLAG_BE_SHIFT           0
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT    (ARM64_IMAGE_FLAG_BE_SHIFT + 1)
+#define ARM64_IMAGE_FLAG_PHYS_BASE_SHIFT    (ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT + 2)
+
+#define ARM64_IMAGE_FLAG_LE                 0
+#define ARM64_IMAGE_FLAG_BE                 1
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_4K       1
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_16K      2
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_64K      3
+#define ARM64_IMAGE_FLAG_PHYS_BASE          1
+
+#define _HEAD_FLAG(field)                   (_HEAD_FLAG_##field << ARM64_IMAGE_FLAG_##field##_SHIFT)
+
+#ifdef ARCH_CPU_BIG_ENDIAN
+#define _HEAD_FLAG_BE                       ARM64_IMAGE_FLAG_BE
+#else
+#define _HEAD_FLAG_BE                       ARM64_IMAGE_FLAG_LE
 #endif
+#define _HEAD_FLAG_PAGE_SIZE                ((ARCH_PAGE_SHIFT - 10) / 2)
+#define _HEAD_FLAG_PHYS_BASE                1
+
+#define _HEAD_FLAGS                         (_HEAD_FLAG(BE) | _HEAD_FLAG(PAGE_SIZE) | _HEAD_FLAG(PHYS_BASE))
+
+    .section ".text.entrypoint","ax"
+
+/*
+ * Our goal is to boot the rt-thread as possible without modifying the
+ * bootloader's config, so we use the kernel's boot header for ARM64:
+ *   https://www.kernel.org/doc/html/latest/arch/arm64/booting.html#call-the-kernel-image
+ */
+_head:
+    b       _start          /* Executable code */
+    .long   0               /* Executable code */
+    .quad   _text_offset    /* Image load offset from start of RAM, little endian */
+    .quad   _end - _head    /* Effective Image size, little endian (_end defined in link.lds) */
+    .quad   _HEAD_FLAGS     /* Kernel flags, little endian */
+    .quad   0               /* Reserved */
+    .quad   0               /* Reserved */
+    .quad   0               /* Reserved */
+    .ascii  "ARM\x64"       /* Magic number */
+    .long   0               /* Reserved (used for PE COFF offset) */
+
+/* Variable registers: x21~x28 */
+dtb_paddr .req x21
+boot_arg0 .req x22
+boot_arg1 .req x23
+boot_arg2 .req x24
+
+    .global __start
+__start:
+/*
+ * Boot CPU general-purpose register settings:
+ *   x0 = physical address of device tree blob (dtb) in system RAM.
+ *   x1 = 0 (reserved for future use)
+ *   x2 = 0 (reserved for future use)
+ *   x3 = 0 (reserved for future use)
+ */
+    mov     dtb_paddr, x0
+    mov     boot_arg0, x1
+    mov     boot_arg1, x2
+    mov     boot_arg2, x3
+
     bl      rt_hw_cpu_id_set
     /* read cpu id, stop slave cores */
     mrs     x0, tpidr_el1

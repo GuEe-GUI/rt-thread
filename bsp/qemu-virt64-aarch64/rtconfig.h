@@ -55,8 +55,6 @@
 
 #define RT_USING_DEVICE
 #define RT_USING_DEVICE_OPS
-#define RT_USING_BUS
-#define RT_USING_DRIVER
 #define RT_USING_DM
 #define RT_USING_DM_FDT
 #define RT_USING_INTERRUPT_INFO
@@ -64,6 +62,9 @@
 #define RT_CONSOLEBUF_SIZE 256
 #define RT_CONSOLE_DEVICE_NAME "uart0"
 #define RT_VER_NUM 0x50001
+
+/* RT-Thread Architecture */
+
 #define ARCH_CPU_64BIT
 #define RT_USING_CACHE
 #define RT_USING_HW_ATOMIC
@@ -71,6 +72,12 @@
 #define ARCH_ARM
 #define ARCH_ARM_MMU
 #define ARCH_ARMV8
+#define ARCH_ARMV8_EXTENSIONS 0
+#define ARCH_SUPPORT_FPU
+#define ARCH_TEXT_OFFSET 0x80000
+#define ARCH_RAM_OFFSET 0x40000000
+#define ARCH_SECONDARY_CPU_STACK_SIZE 4096
+#define ARCH_HAVE_EFFICIENT_UNALIGNED_ACCESS
 
 /* RT-Thread Components */
 
