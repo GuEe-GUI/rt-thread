@@ -10,6 +10,8 @@
 #ifndef __MMU_H_
 #define __MMU_H_
 
+#ifndef __ASSEMBLY__
+
 #include <rtthread.h>
 #include <mm_aspace.h>
 
@@ -28,6 +30,8 @@ struct mem_desc
     unsigned long attr;
     struct rt_varea varea;
 };
+
+#endif /* !__ASSEMBLY__ */
 
 #define MMU_AF_SHIFT     10
 #define MMU_SHARED_SHIFT 8
@@ -71,6 +75,8 @@ struct mem_desc
 
 #define ARCH_MAP_FAILED ((void *)0x1ffffffffffff)
 
+#ifndef __ASSEMBLY__
+
 struct rt_aspace;
 
 void rt_hw_mmu_ktbl_set(unsigned long tbl);
@@ -80,7 +86,7 @@ void rt_hw_mmu_setup(struct rt_aspace *aspace, struct mem_desc *mdesc,
                      int desc_nr);
 
 int rt_hw_mmu_map_init(struct rt_aspace *aspace, void *v_address,
-                       rt_size_t size, rt_size_t *vtable, rt_size_t pv_off);
+                       rt_size_t size, rt_size_t *vtable);
 void *rt_hw_mmu_map(struct rt_aspace *aspace, void *v_addr, void *p_addr,
                     size_t size, size_t attr);
 void rt_hw_mmu_unmap(struct rt_aspace *aspace, void *v_addr, size_t size);
@@ -122,4 +128,10 @@ static inline void *rt_hw_mmu_kernel_v2p(void *v_addr)
 int rt_hw_mmu_control(struct rt_aspace *aspace, void *vaddr, size_t size,
                       enum rt_mmu_cntl cmd);
 
+#ifndef __MMU_INTERNAL
+extern unsigned long MMUTable[];
 #endif
+
+#endif /* !__ASSEMBLY__ */
+
+#endif /* __MMU_H_ */

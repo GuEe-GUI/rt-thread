@@ -1,0 +1,25 @@
+menuconfig RT_USING_RTC
+    bool "Using RTC device drivers"
+    default n
+
+    if RT_USING_RTC
+        config RT_USING_ALARM
+            bool "Using RTC alarm"
+            default n
+
+        config RT_USING_SOFT_RTC
+            bool "Using software simulation RTC device"
+            default n
+    endif
+
+config RT_RTC_PL031
+    bool "ARM PL031"
+    depends on RT_USING_DM
+    depends on RT_USING_RTC
+    default n
+
+config RT_RTC_GOLDFISH
+    bool "Goldfish Real Time Clock"
+    depends on RT_USING_DM
+    depends on RT_USING_RTC
+    default n

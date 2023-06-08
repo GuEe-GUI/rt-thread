@@ -9,8 +9,8 @@
  * 2023-5-18      GuEe-GUI     implemented by rtatomic
  */
 
-#ifndef __REF_H__
-#define __REF_H__
+#ifndef __UTIL_REF_H__
+#define __UTIL_REF_H__
 
 #include <rtatomic.h>
 
@@ -72,4 +72,4 @@ rt_inline int ref_get_unless_zero(struct ref *r)
     return (int)rt_atomic_inc_not_zero(&r->refcount);
 }
 
-#endif /* __REF_H__ */
+#endif /* __UTIL_REF_H__ */

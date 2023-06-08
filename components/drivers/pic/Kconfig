@@ -1,0 +1,56 @@
+menuconfig RT_USING_PIC
+    bool "Using Programmable Interrupt Controller (PIC)"
+    select RT_USING_BITMAP
+    depends on RT_USING_DM
+    default n
+
+config MAX_HANDLERS
+    int "IRQ max handlers"
+    depends on RT_USING_PIC
+    range 1 4294967294
+    default 256
+
+config RT_PIC_BCM2835_INTC
+    bool "BCM2835 intc"
+    depends on RT_USING_PIC
+    default n
+
+config RT_PIC_BCM2836_L1_INTC
+    bool "BCM2836 L1 intc"
+    depends on RT_USING_PIC
+    default n
+
+config RT_PIC_ARM_GIC
+    bool "ARM GICv2/v1"
+    depends on RT_USING_PIC
+    default n
+
+config RT_PIC_ARM_GIC_V2M
+    bool "ARM GIC V2M" if RT_PIC_ARM_GIC && RT_PCI_MSI
+    default n
+
+config RT_PIC_ARM_GIC_V3
+    bool "ARM GICv3"
+    depends on RT_USING_PIC
+    default n
+
+config RT_PIC_ARM_GIC_V3_ITS
+    bool "ARM GICv3 ITS (Interrupt Translation Service)" if RT_PIC_ARM_GIC_V3 && RT_PCI_MSI
+    default n
+
+config RT_PIC_ARM_GIC_MAX_NR
+    int
+    depends on RT_USING_PIC
+    depends on RT_PIC_ARM_GIC
+    default 2 if SOC_REALVIEW
+    default 1
+
+config RT_PIC_RISCV_INTC
+    bool "RISC-V Local Interrupt Controller"
+    depends on RT_USING_PIC
+    default n
+
+config RT_PIC_SIFIVE_PLIC
+    bool "SiFive Platform-Level Interrupt Controller"
+    depends on RT_USING_PIC
+    default n

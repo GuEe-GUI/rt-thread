@@ -522,7 +522,10 @@ def Preprocessing(input, suffix, output = None, CPPPATH = None):
         cpppath = CPPPATH
         for cpppath_item in cpppath:
             inc += ' -I' + cpppath_item
-        CPP = rtconfig.EXEC_PATH + '/' + rtconfig.CPP + rtconfig.CPPFLAGS
+        CPP = rtconfig.EXEC_PATH + '/' + rtconfig.CPP
+        if not os.path.exists(CPP):
+            CPP = rtconfig.CPP
+        CPP += rtconfig.CPPFLAGS
         path = GetCurrentDir() + '/'
         os.system(CPP + inc + ' ' + path + input + ' -o ' + path + output)
     else:

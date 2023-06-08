@@ -255,6 +255,13 @@ def menuconfig(RTT_ROOT):
     fn = '.config'
     fn_old = '.config.old'
 
+    if os.environ.get('BSP_ROOT') == None:
+        import building
+        os.environ.setdefault('BSP_ROOT', building.GetCurrentDir())
+
+    if os.environ.get('RTT_ROOT') == None:
+        os.environ.setdefault('RTT_ROOT', RTT_ROOT)
+
     kconfig_cmd = os.path.join(RTT_ROOT, 'tools', 'kconfig-frontends', 'kconfig-mconf')
     os.system(kconfig_cmd + ' Kconfig')
 

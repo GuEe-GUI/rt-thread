@@ -15,6 +15,8 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
+void (*rt_device_hwtimer_us_delay)(rt_uint32_t us) = RT_NULL;
+
 rt_inline rt_uint32_t timeout_calc(rt_hwtimer_t *timer, rt_hwtimerval_t *tv)
 {
     float overflow;

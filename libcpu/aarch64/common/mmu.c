@@ -16,13 +16,15 @@
 #include <stdint.h>
 #include <string.h>
 
+#define __MMU_INTERNAL
+
 #include "mm_aspace.h"
 #include "mm_page.h"
 #include "mmu.h"
 #include "tlb.h"
 
-#ifdef RT_USING_SMART
 #include "ioremap.h"
+#ifdef RT_USING_SMART
 #include <lwp_mm.h>
 #endif
 
@@ -45,6 +47,10 @@
 #define MMU_TBL_BLOCK_2M_LEVEL 2
 #define MMU_TBL_PAGE_4k_LEVEL  3
 #define MMU_TBL_LEVEL_NR       4
+
+#ifndef KERNEL_VADDR_START
+#define KERNEL_VADDR_START ARCH_RAM_OFFSET
+#endif
 
 volatile unsigned long MMUTable[512] __attribute__((aligned(4 * 1024)));
 
@@ -423,21 +429,12 @@ void rt_hw_mmu_setup(rt_aspace_t aspace, struct mem_desc *mdesc, int desc_nr)
     rt_page_cleanup();
 }
 
-#ifdef RT_USING_SMART
 static void _init_region(void *vaddr, size_t size)
 {
     rt_ioremap_start = vaddr;
     rt_ioremap_size = size;
     rt_mpr_start = (char *)rt_ioremap_start - rt_mpr_size;
 }
-#else
-
-#define RTOS_VEND (0xfffffffff000UL)
-static inline void _init_region(void *vaddr, size_t size)
-{
-    rt_mpr_start = (void *)(RTOS_VEND - rt_mpr_size);
-}
-#endif
 
 /**
  * This function will initialize rt_mmu_info structure.
@@ -446,12 +443,11 @@ static inline void _init_region(void *vaddr, size_t size)
  * @param v_address  virtual address
  * @param size       map size
  * @param vtable     mmu table
- * @param pv_off     pv offset in kernel space
  *
  * @return 0 on successful and -1 for fail
  */
 int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
-                       size_t *vtable, size_t pv_off)
+                       size_t *vtable)
 {
     size_t va_s, va_e;
 
@@ -476,12 +472,8 @@ int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
         return -1;
     }
 
-#ifdef RT_USING_SMART
     rt_aspace_init(aspace, (void *)KERNEL_VADDR_START, 0 - KERNEL_VADDR_START,
                    vtable);
-#else
-    rt_aspace_init(aspace, (void *)0x1000, RTOS_VEND - 0x1000ul, vtable);
-#endif
 
     _init_region(v_address, size);
 
@@ -531,18 +523,15 @@ struct page_table
 
 static struct page_table *__init_page_array;
 static unsigned long __page_off = 0UL;
+
+void set_free_page(void *page_array)
+{
+    __init_page_array = page_array;
+}
+
 unsigned long get_free_page(void)
 {
-    if (!__init_page_array)
-    {
-        unsigned long temp_page_start;
-        asm volatile("mov %0, sp" : "=r"(temp_page_start));
-        __init_page_array =
-            (struct page_table *)(temp_page_start & ~(ARCH_SECTION_MASK));
-        __page_off = 2; /* 0, 1 for ttbr0, ttrb1 */
-    }
-    __page_off++;
-    return (unsigned long)(__init_page_array[__page_off - 1].page);
+    return (unsigned long)(__init_page_array[__page_off++].page);
 }
 
 static int _map_single_page_2M(unsigned long *lv0_tbl, unsigned long va,
@@ -591,6 +580,30 @@ static int _map_single_page_2M(unsigned long *lv0_tbl, unsigned long va,
     off &= MMU_LEVEL_MASK;
     cur_lv_tbl[off] = pa;
     return 0;
+}
+
+void *rt_ioremap_early(void *paddr, size_t size)
+{
+    static void *ttbr0 = RT_NULL;
+
+    if (!size)
+    {
+        return RT_NULL;
+    }
+
+    if (!ttbr0)
+    {
+        __asm__ volatile ("mrs %0, ttbr0_el1":"=r"(ttbr0));
+    }
+
+    _map_single_page_2M(ttbr0, (unsigned long)paddr, (unsigned long)paddr, MMU_MAP_K_DEVICE);
+
+    return paddr;
+}
+
+void rt_iounmap_early(void *vaddr, size_t size)
+{
+
 }
 
 static int _init_map_2M(unsigned long *lv0_tbl, unsigned long va,

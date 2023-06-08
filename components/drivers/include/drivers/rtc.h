@@ -54,14 +54,6 @@ typedef struct rt_rtc_device
     const struct rt_rtc_ops *ops;
 } rt_rtc_dev_t;
 
-struct rt_rtc_driver
-{
-    struct rt_driver parent;      
-#ifdef RT_USING_DEVICE_OPS
-    struct rt_device_ops *ops;
-#endif
-};
-
 rt_err_t rt_hw_rtc_register(rt_rtc_dev_t  *rtc,
                             const char    *name,
                             rt_uint32_t    flag,

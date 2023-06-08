@@ -165,6 +165,40 @@ extern "C" {
 #include "drivers/lcd.h"
 #endif
 
+#ifdef RT_USING_DM
+#include "drivers/core/bus.h"
+#include "drivers/core/rtdm.h"
+#include "drivers/platform.h"
+
+#ifdef RT_USING_CLK
+#include "drivers/clk.h"
+#endif
+
+#ifdef RT_USING_FIRMWARE
+#ifdef RT_FIRMWARE_PSCI
+#include "drivers/psci.h"
+#endif
+#endif /* RT_USING_FIRMWARE */
+
+#ifdef RT_USING_OFW
+#include "drivers/ofw.h"
+#include "drivers/ofw_fdt.h"
+#include "drivers/ofw_io.h"
+#include "drivers/ofw_irq.h"
+#include "drivers/ofw_raw.h"
+#endif /* RT_USING_OFW */
+
+#ifdef RT_USING_PIC
+#include "drivers/pic.h"
+#endif
+
+#ifdef RT_USING_VIRTIO
+#include "drivers/virtio.h"
+#include "drivers/virtq.h"
+#endif
+
+#endif /* RT_USING_DM */
+
 #ifdef __cplusplus
 }
 #endif

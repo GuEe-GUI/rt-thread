@@ -26,7 +26,6 @@
     STR Q14, [\reg, #-0x10]!
     STR Q15, [\reg, #-0x10]!
 .endm
-
 .macro RESTORE_FPU, reg
     LDR Q15, [\reg], #0x10
     LDR Q14, [\reg], #0x10

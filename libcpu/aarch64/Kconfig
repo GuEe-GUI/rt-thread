@@ -5,10 +5,6 @@ config ARCH_ARMV8_EXTENSIONS
     range 0 8
     default 0
 
-config ARCH_SUPPORT_FPU
-    bool "Enable FPU"
-    default y
-
 config ARCH_TEXT_OFFSET
     hex "Text offset"
     default 0x200000
@@ -16,6 +12,10 @@ config ARCH_TEXT_OFFSET
 config ARCH_RAM_OFFSET
     hex "RAM offset"
     default 0
+
+config ARCH_ASPACE_SIZE
+    hex "Address space size"
+    default 0xffffffff
 
 config ARCH_SECONDARY_CPU_STACK_SIZE
     int "Secondary CPU stack size"

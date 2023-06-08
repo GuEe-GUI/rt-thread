@@ -1,0 +1,37 @@
+menuconfig RT_USING_VIRTIO
+    bool "Using VirtIO device drivers"
+    depends on RT_USING_DM
+    default n
+
+config RT_VIRTIO_NET
+    bool "VirtIO Net"
+    select RT_USING_LWIP
+    depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_BLK
+    bool "VirtIO BLK"
+    depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_CONSOLE
+    bool "VirtIO Console"
+    depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_RNG
+    bool "VirtIO RNG"
+    select RT_USING_HWCRYPTO
+    select RT_HWCRYPTO_USING_RNG
+    depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_GPU
+    bool "VirtIO GPU"
+    depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_INPUT
+    bool "VirtIO Input"
+    depends on RT_USING_VIRTIO
+    default y

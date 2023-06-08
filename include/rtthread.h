@@ -524,8 +524,8 @@ void rt_spin_unlock_irqrestore(struct rt_spinlock *lock, rt_base_t level);
 #else
 #define rt_spin_lock_init(lock)                 /* nothing */
 #define rt_spin_lock(lock)                      rt_enter_critical()
-#define rt_spin_unlock(lock)                    rt_exit_critical()
-#define rt_spin_lock_irqsave(lock)              rt_hw_interrupt_disable()
+#define rt_spin_unlock(lock)                    (RT_UNUSED(lock), rt_exit_critical())
+#define rt_spin_lock_irqsave(lock)              (RT_UNUSED(lock), rt_hw_interrupt_disable())
 #define rt_spin_unlock_irqrestore(lock, level)  rt_hw_interrupt_enable(level)
 
 #endif
@@ -572,14 +572,6 @@ rt_ssize_t rt_device_write(rt_device_t dev,
                           const void *buffer,
                           rt_size_t   size);
 rt_err_t  rt_device_control(rt_device_t dev, int cmd, void *arg);
-#ifdef RT_USING_DM
-rt_err_t rt_device_bind_driver(rt_device_t device, rt_driver_t driver, void *node);
-rt_device_t rt_device_create_since_driver(rt_driver_t drv,int device_id);
-rt_err_t rt_device_probe_and_init(rt_device_t device);
-
-rt_err_t rt_driver_match_with_id(const rt_driver_t drv,int device_id);
-rt_err_t rt_driver_match_with_dtb(const rt_driver_t drv,void *from_node,int max_dev_num);
-#endif
 /**@}*/
 #endif
 
@@ -668,6 +660,12 @@ rt_int32_t rt_memcmp(const void *cs, const void *ct, rt_size_t count);
 #endif /* RT_KSERVICE_USING_STDLIB_MEMORY */
 char *rt_strdup(const char *s);
 rt_size_t rt_strnlen(const char *s, rt_ubase_t maxlen);
+char *rt_strchr(const char *s, int c);
+char *rt_strrchr(const char *s, int c);
+char *rt_strchrnul(const char *s, int c);
+rt_size_t rt_strspn(const char *s, const char *accept);
+rt_size_t rt_strcspn(const char *s, const char *reject);
+char *rt_strtok_r(char *s, const char *delim, char **context);
 #ifndef RT_KSERVICE_USING_STDLIB
 char *rt_strstr(const char *str1, const char *str2);
 rt_int32_t rt_strcasecmp(const char *a, const char *b);

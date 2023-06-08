@@ -1,16 +1,17 @@
 from building import *
 
-cwd     = GetCurrentDir()
-src     = []
+cwd = GetCurrentDir()
+src = ['device.c', 'driver.c']
+CPPPATH = [cwd + '/../include']
+group = []
 
 if GetDepend(['RT_USING_DM']):
-    src += ['bus.c']
-    src += ['platform.c']
+    src += ['dm.c', 'bus.c', 'platform.c']
 
-src += ['device.c']
-src += ['driver.c']
+if GetDepend(['RT_USING_OFW']):
+    src += ['platform_ofw.c']
 
-CPPPATH = [cwd]
-group   = DefineGroup('bus_core', src, depend = [], CPPPATH = CPPPATH)
- 
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
 Return('group')
+

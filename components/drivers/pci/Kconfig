@@ -1,0 +1,16 @@
+menuconfig RT_USING_PCI
+    bool "Using Peripheral Component Interconnect Express (PCIe/PCI)"
+    depends on RT_USING_DM
+    default n
+
+config RT_PCI_MSI
+    bool "MSI/MSI-X"
+    depends on RT_USING_PCI
+    default y
+
+config RT_PCI_ECAM
+    bool "PCIe ECAM"
+    depends on RT_USING_PCI
+    default y
+    help
+        PCIe Express Enhanced Configuration Access Mechanism

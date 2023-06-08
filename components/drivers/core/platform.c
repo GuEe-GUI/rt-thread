@@ -9,189 +9,123 @@
  */
 
 #include <rtthread.h>
-#include <rtdef.h>
+
+#include <drivers/platform.h>
 #include <drivers/core/bus.h>
-#include <drivers/core/platform.h>
-#include <drivers/amba_bus.h>
+#include <drivers/core/rtdm.h>
 
-static struct rt_bus platform_bus = {
-    .name = "platform",
-    .match = rt_platform_match,
-};
-
-static struct rt_device_id skipped_node_table[] =
-    {
-        {/* sentinel */}};
+static struct rt_bus platform_bus;
 
 /**
- *  @brief This function create a platform device
+ *  @brief This function create a platform device.
  *
- *  @param node the device node from dtb
+ *  @param name is name of the platform device.
  *
- *  @return a new platform device
+ *  @return a new platform device.
  */
-rt_pdevice_t rt_pdevice_create(struct dtb_node *node)
+struct rt_platform_device *rt_platform_device_alloc(const char *name)
 {
-    struct rt_platform_device *pdev;
+    struct rt_platform_device *pdev = rt_calloc(1, sizeof(*pdev));
 
-    RT_ASSERT(node != RT_NULL);
-
-    pdev = (rt_pdevice_t)rt_malloc(sizeof(struct rt_platform_device));
-    pdev->dev.dtb_node = node;
-    pdev->name = node->name;
+    pdev->parent.bus = &platform_bus;
+    pdev->name = name;
 
     return pdev;
 }
 
 /**
- *  @brief This function check if the id of dtb_node existed in id_table
+ *  @brief This function register a rt_driver to platform bus.
  *
- *  @param id the id table to check
- *
- *  @param dtb_node the device node to be matched
- * 
- *  @return the error code, RT_TRUE on matcheded successfully.
+ *  @return the error code, RT_EOK on successfully.
  */
-static rt_bool_t rt_match_node(const struct rt_device_id *id, struct dtb_node *dtb_node)
+rt_err_t rt_platform_driver_register(struct rt_platform_driver *pdrv)
 {
-    const char *compatible = id->compatible;
-    while (id->compatible)
-    {
-        rt_bool_t is_matched = dtb_node_get_dtb_node_compatible_match(dtb_node, compatible);
-        if (is_matched)
-            return RT_TRUE;
-        id++;
-    }
-    return RT_FALSE;
+    RT_ASSERT(pdrv != RT_NULL);
+
+    pdrv->parent.bus = &platform_bus;
+
+    return rt_driver_register(&pdrv->parent);
 }
 
 /**
- *  @brief This function match a platform device/driver
+ *  @brief This function register a rt_device to platform bus.
  *
- *  @param drv the driver to be matched
- *
- *  @param dev the device to be matched
- *
- *  @return the error code, RT_TRUE on matcheded successfully.
+ *  @return the error code, RT_EOK on successfully.
  */
-rt_bool_t rt_platform_match(struct rt_driver *drv, struct rt_device *dev)
+rt_err_t rt_platform_device_register(struct rt_platform_device *pdev)
 {
-    RT_ASSERT(dev != RT_NULL);
-    RT_ASSERT(drv != RT_NULL);
+    RT_ASSERT(pdev != RT_NULL);
 
-    struct dtb_node *dtb_node = dev->dtb_node;
-    /*1、match with dtb_node*/
-    if (dtb_node)
-    {
-        const struct rt_device_id *id = drv->ids;
-        return rt_match_node(id, dtb_node);
-    }
-    /*2、match with name*/
-    else if (dev->name)
-    {
-        return !strcmp(drv->name, dev->name);
-    }
-    return RT_FALSE;
+    return rt_bus_add_device(&platform_bus, &pdev->parent);
 }
 
-/**
- *  @brief This function create a platform device
- *
- *  @param node the dtb_node for a new device
- *
- *  @return the error code, RT_TRUE on matcheded successfully.
- */
-static rt_err_t rt_platform_device_create(struct dtb_node *node)
+static rt_bool_t platform_match(rt_driver_t drv, rt_device_t dev)
 {
-    rt_err_t ret = RT_EOK;
-    struct rt_platform_device *pdev;
+    struct rt_ofw_node *np = dev->ofw_node;
+    struct rt_platform_driver *pdrv = rt_container_of(drv, struct rt_platform_driver, parent);
+    struct rt_platform_device *pdev = rt_container_of(dev, struct rt_platform_device, parent);
 
-    RT_ASSERT(node != RT_NULL);
-
-    /* Skip nodes for which not contain property -- compatible */
-    if(!dtb_node_get_property(node, "compatible", NULL))
+    if (np)
     {
-        return ret;
+        /* 1、match with ofw node */
+        pdev->id = rt_ofw_node_match(np, pdrv->ids);
+
+        return !!pdev->id;
     }
-
-    /* Skip nodes for which we don't want to create devices */
-    if (rt_match_node(skipped_node_table, node))
+    else if (pdev->name && pdrv->name)
     {
-        rt_kprintf("%s() - skipping device node [%s]\n", __func__, node->name);
-        return ret;
-    }
-
-    /* new amba device */
-    if (dtb_node_get_dtb_node_compatible_match(node, "arm,primecell"))
-    {
-        struct rt_bus *amba_bus;
-
-        amba_bus = rt_bus_find_by_name("amba");
-        struct rt_amba_device *amba_device = rt_amba_device_create(node);
-
-        if (amba_bus)
+        /* 2、match with name */
+        if (pdev->name == pdrv->name)
         {
-            ret = rt_bus_add_device(amba_bus, &amba_device->dev);
+            return RT_TRUE;
+        }
+        else
+        {
+            return !rt_strcmp(pdrv->name, pdev->name);
         }
     }
-    /* new platform devices */
+
+    return RT_FALSE;
+}
+
+static rt_err_t platform_probe(rt_device_t dev)
+{
+    rt_err_t err;
+    struct rt_ofw_node *np = dev->ofw_node;
+    struct rt_platform_driver *pdrv = rt_container_of(dev->drv, struct rt_platform_driver, parent);
+    struct rt_platform_device *pdev = rt_container_of(dev, struct rt_platform_device, parent);
+
+    err = pdrv->probe(pdev);
+
+    if (!err)
+    {
+        if (np)
+        {
+            rt_ofw_node_set_flag(np, RT_OFW_F_READLY);
+        }
+    }
     else
     {
-        pdev =  rt_pdevice_create(node);
-        ret = rt_bus_add_device(&platform_bus, &pdev->dev);
+        if (np)
+        {
+            rt_ofw_data(np) = &pdev->parent;
+        }
     }
 
-    return ret;
+    return err;
 }
 
-/**
- *  @brief This function create platform devices by device nodes
- *
- *  @param node the root node for device tree
- *
- *  @return the error code, RT_TRUE on matcheded successfully.
- */
-rt_err_t rt_platform_devices_init_with_dtb(struct dtb_node *device_root_node)
+static struct rt_bus platform_bus =
 {
-    struct dtb_node *node;
+    .name = "platform",
+    .match = platform_match,
+    .probe = platform_probe,
+};
 
-    RT_ASSERT(device_root_node != RT_NULL);
-
-    node = (struct dtb_node *)device_root_node->child;
-    while (node)
-    {
-        rt_platform_device_create(node);
-        node = node->sibling;
-    }
-    return RT_EOK;
-}
-RTM_EXPORT(rt_devices_init_with_dtb);
-
-int dbt_unflattern(void)
-{
-    struct dtb_node *device_root_node = get_dtb_node_head();
-    if (device_root_node)
-    {
-        rt_platform_devices_init_with_dtb(device_root_node);
-    }
-    return 0;
-}
-INIT_BOARD_EXPORT(dbt_unflattern);
-
-rt_err_t rt_platform_driver_register(rt_driver_t drv)
-{
-    return rt_driver_register(drv);
-}
-
-rt_err_t rt_timer_driver_register(rt_driver_t drv)
-{
-    return rt_driver_register(drv);
-}
-
-int platform_bus_init(void)
+static int platform_bus_init(void)
 {
     rt_bus_register(&platform_bus);
+
     return 0;
 }
-
-INIT_BUS_EXPORT(platform_bus_init);
+INIT_CORE_EXPORT(platform_bus_init);

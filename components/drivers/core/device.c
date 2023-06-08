@@ -16,7 +16,6 @@
  */
 
 #include <rtthread.h>
-#include <drivers/core/platform.h>
 #include <drivers/core/bus.h>
 
 #ifdef RT_USING_POSIX_DEVIO
@@ -459,104 +458,5 @@ rt_err_t rt_device_set_tx_complete(rt_device_t dev,
     return RT_EOK;
 }
 RTM_EXPORT(rt_device_set_tx_complete);
-
-#ifdef RT_USING_DM
-/**
- * This function  bind drvier and device
- *
- * @param device the pointer of device structure
- * @param driver the pointer of driver structure
- * @param node the pointer of fdt node structure
- *
- * @return the error code, RT_EOK on successfully.
- */
-rt_err_t rt_device_bind_driver(rt_device_t device, rt_driver_t driver, void *node)
-{
-    if((!driver) || (!device))
-    {
-        return -RT_EINVAL;
-    }
-
-    device->drv = driver;
-#ifdef RT_USING_DEVICE_OPS    
-    device->ops = driver->dev_ops;
-#endif    
-    device->dtb_node = node;
-
-    return RT_EOK;
-} 
-RTM_EXPORT(rt_device_bind_driver);
-
-/**
- * This function  create rt_device according to driver infomation
- *
- * @param drv the pointer of driver structure
- * @param device_id specify the ID of the rt_device
- *
- * @return the error code, RT_EOK on successfully.
- */
-rt_device_t rt_device_create_since_driver(rt_driver_t drv,int device_id)
-{
-    rt_device_t device;
-
-    RT_ASSERT(drv != RT_NULL);
-
-    device = (rt_device_t)rt_calloc(1,drv->device_size);
-    if(device == RT_NULL)
-    {
-        return RT_NULL;
-    }
-    device->device_id = device_id;
-    rt_snprintf(device->parent.name, sizeof(device->parent.name), "%s%d", drv->name, device_id);
-    return device;
-}
-RTM_EXPORT(rt_device_create_since_driver);
-
-/**
- * This function  rt_device probe and init
- *
- * @param device the pointer of rt_device structure
- * @return the error code, RT_EOK on successfully.
- */
-rt_err_t rt_device_probe_and_init(rt_device_t dev)
-{
-    int ret = -RT_ERROR;
-
-    RT_ASSERT(dev != RT_NULL);
-    RT_ASSERT(dev->drv != RT_NULL);
-
-    if(dev->drv->probe)
-    {
-        ret = dev->drv->probe((rt_device_t)dev);
-    }
-    if(dev->drv->probe_init)
-    {
-        ret = dev->drv->probe_init((rt_device_t)dev);
-    }
-    return ret;
-}
-RTM_EXPORT(rt_device_probe_and_init);
-
-/**
- *  @brief This function attach a device to bus
- *  @param dev the device to be registered
- */
-void rt_device_attach(struct rt_device *dev)
-{
-    RT_ASSERT(dev != RT_NULL);
-    
-    struct rt_bus *platform_bus = RT_NULL;
-
-    rt_list_init(&(dev->node));
-
-    platform_bus = rt_bus_find_by_name("platform");
-
-    if (platform_bus)
-    {
-        rt_bus_add_device(platform_bus, dev);
-    }
-}
-
-#endif /* RT_USING_DM */
 
 #endif /* RT_USING_DEVICE */

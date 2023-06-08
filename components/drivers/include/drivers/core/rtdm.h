@@ -5,30 +5,46 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2023-04-20     ErikChan      the first version
+ * 2023-04-20     ErikChan     the first version
  */
 
 #ifndef __RT_DM_H__
 #define __RT_DM_H__
 
-/* init early before board_int, such as unflatten device tree */
-#define INIT_EARLY_EXPORT(fn)       INIT_EXPORT(fn, "0.end.0")
+#include <rthw.h>
+#include <rtdef.h>
+#include <drivers/misc.h>
+#include <drivers/byteorder.h>
 
-/* init buses */
-#define INIT_BUS_EXPORT(fn)         INIT_EXPORT(fn, "0.end.1")
+#ifndef RT_CPUS_NR
+#define RT_CPUS_NR 1
+#endif
 
-/* init subsystems */
-#define INIT_SUBSYS_EXPORT(fn)      INIT_EXPORT(fn, "1.0")
+#ifndef RT_USING_SMP
+extern int rt_hw_cpu_id(void);
+#endif
 
-/* init drivers */
-#define INIT_DRIVER_BUILIN_EXPORT(fn)     INIT_EXPORT(fn, "1.1")
+void rt_dm_secondary_cpu_init(void);
 
-#define RT_DRIVER_EXPORT(driver, bus_name, mode)      \
-static int ___##driver##_register(void)               \
-{                                                     \
-    rt_##bus_name##_driver_register(&driver);         \
-    return 0;                                         \
-}                                                     \
-INIT_DRIVER_##mode##_EXPORT(___##driver##_register);  \
+int rt_dm_set_dev_name_auto(rt_device_t dev, const char *prefix);
+int rt_dm_get_dev_name_id(rt_device_t dev);
+
+int rt_dm_set_dev_name(rt_device_t dev, const char *format, ...);
+const char *rt_dm_get_dev_name(rt_device_t dev);
+
+/* init cpu, memory, interrupt-controller, bus... */
+#define INIT_CORE_EXPORT(fn)            INIT_EXPORT(fn, "1.0")
+/* init pci/pcie, usb platform driver... */
+#define INIT_FRAMEWORK_EXPORT(fn)       INIT_EXPORT(fn, "1.1")
+/* init platform, user code... */
+#define INIT_PLATFORM_EXPORT(fn)        INIT_EXPORT(fn, "1.2")
+/* init sys-timer, clk, pinctrl... */
+#define INIT_SUBSYS_EXPORT(fn)          INIT_EXPORT(fn, "1.3")
+/* init early drivers */
+#define INIT_DRIVER_EARLY_EXPORT(fn)    INIT_EXPORT(fn, "1.4")
+/* init in secondary_cpu_c_start */
+#define INIT_SECONDARY_CPU_EXPORT(fn)   INIT_EXPORT(fn, "7")
+/* init after mount fs */
+#define INIT_FS_EXPORT(fn)              INIT_EXPORT(fn, "6.0")
 
 #endif /* __RT_DM_H__ */

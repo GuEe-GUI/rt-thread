@@ -119,6 +119,7 @@ rt_isr_handler_t rt_hw_interrupt_install(int              vector,
                                          rt_isr_handler_t handler,
                                          void            *param,
                                          const char      *name);
+void rt_hw_interrupt_uninstall(int vector, rt_isr_handler_t handler, void *param);
 
 #ifdef RT_USING_SMP
 rt_base_t rt_hw_local_irq_disable();

@@ -10,7 +10,7 @@
 #ifndef __RT_ATOMIC_H__
 #define __RT_ATOMIC_H__
 
-#include <rtdef.h>
+#include <rthw.h>
 
 rt_atomic_t rt_hw_atomic_load(volatile rt_atomic_t *ptr);
 void rt_hw_atomic_store(volatile rt_atomic_t *ptr, rt_atomic_t val);
