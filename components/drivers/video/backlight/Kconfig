@@ -1,0 +1,25 @@
+menuconfig RT_VIDEO_BACKLIGHT
+    bool "Backlight support"
+    depends on RT_USING_VIDEO
+    default n
+
+config RT_VIDEO_BACKLIGHT_GPIO
+    bool "Generic GPIO based backlight driver"
+    depends on RT_VIDEO_BACKLIGHT
+    select RT_USING_PIN
+    default n
+
+config RT_VIDEO_BACKLIGHT_PWM
+    bool "Generic PWM based backlight driver"
+    depends on RT_VIDEO_BACKLIGHT
+    select RT_USING_OFW
+    select RT_USING_PIN
+    select RT_USING_PWM
+    select RT_USING_REGULATOR
+    default n
+
+config RT_VIDEO_BACKLIGHT_RPI
+    bool "Raspberry Pi display firmware driven backlight"
+    depends on RT_VIDEO_BACKLIGHT
+    select RT_FIRMWARE_RASPBERRYPI
+    default n

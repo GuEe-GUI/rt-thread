@@ -26,6 +26,12 @@ static rt_list_t blk_devices = RT_LIST_OBJECT_INIT(blk_devices);
 
 #define BLK_MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#ifdef RT_USING_DM
+#define BLK_PART_FMT    "%sp%d"
+#else
+#define BLK_PART_FMT    "%s%d"
+#endif
+
 struct mmcsd_blk_device
 {
     struct rt_mmcsd_card *card;
@@ -479,7 +485,7 @@ rt_int32_t gpt_device_probe(struct rt_mmcsd_card *card)
         status = gpt_get_partition_param(card, &blk_dev->part, i);
         if (status == RT_EOK)
         {
-            rt_snprintf(dname, sizeof(dname) - 1, "%s%d", card->host->name, i);
+            rt_snprintf(dname, sizeof(dname) - 1, BLK_PART_FMT, card->host->name, i);
             rt_snprintf(sname, sizeof(sname) - 1, "sem_%s%d", card->host->name, i + 1);
             blk_dev->part.lock = rt_sem_create(sname, 1, RT_IPC_FLAG_FIFO);
 
@@ -610,7 +616,7 @@ rt_int32_t mbr_device_probe(struct rt_mmcsd_card *card)
             status = dfs_filesystem_get_partition(&blk_dev->part, sector, i);
             if (status == RT_EOK)
             {
-                rt_snprintf(dname, sizeof(dname) - 1, "%s%d", card->host->name, i);
+                rt_snprintf(dname, sizeof(dname) - 1, BLK_PART_FMT, card->host->name, i);
                 rt_snprintf(sname, sizeof(sname) - 1, "sem_%s%d", card->host->name, i + 1);
                 blk_dev->part.lock = rt_sem_create(sname, 1, RT_IPC_FLAG_FIFO);
 

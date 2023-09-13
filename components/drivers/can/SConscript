@@ -1,8 +1,15 @@
 from building import *
 
 cwd     = GetCurrentDir()
-src     = Glob('*.c')
+src     = ['can.c']
 CPPPATH = [cwd + '/../include']
+
+if GetDepend(['RT_USING_DM']):
+    src += ['can_dm.c']
+
+    if GetDepend(['RT_CAN_CANFD_ROCKCHIP']):
+        src += ['canfd-rockchip.c']
+
 group   = DefineGroup('DeviceDrivers', src, depend = ['RT_USING_CAN'], CPPPATH = CPPPATH)
 
 Return('group')

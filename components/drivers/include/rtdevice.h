@@ -168,17 +168,49 @@ extern "C" {
 #ifdef RT_USING_DM
 #include "drivers/core/bus.h"
 #include "drivers/core/rtdm.h"
+#include "drivers/core/numa.h"
+#include "drivers/core/power.h"
+#include "drivers/core/power_domain.h"
 #include "drivers/platform.h"
+
+#ifdef RT_USING_BLK
+#include "drivers/blk.h"
+#endif
 
 #ifdef RT_USING_CLK
 #include "drivers/clk.h"
 #endif
 
+#ifdef RT_USING_DMA
+#include "drivers/dma.h"
+#endif
+
+#ifdef RT_USING_HWSPINLOCK
+#include "drivers/hwspinlock.h"
+#endif
+
+#include "drivers/iio.h"
+
 #ifdef RT_USING_FIRMWARE
+#ifdef RT_FIRMWARE_ARM_SCMI
+#include "drivers/scmi.h"
+#endif
 #ifdef RT_FIRMWARE_PSCI
 #include "drivers/psci.h"
 #endif
 #endif /* RT_USING_FIRMWARE */
+
+#ifdef RT_USING_LED
+#include "drivers/led.h"
+#endif
+
+#ifdef RT_USING_MBOX
+#include "drivers/mailbox.h"
+#endif
+
+#ifdef RT_USING_NVMEM
+#include "drivers/nvmem.h"
+#endif
 
 #ifdef RT_USING_OFW
 #include "drivers/ofw.h"
@@ -191,6 +223,39 @@ extern "C" {
 #ifdef RT_USING_PIC
 #include "drivers/pic.h"
 #endif
+
+#ifdef RT_USING_PCI
+#include "drivers/pci.h"
+#ifdef RT_PCI_MSI
+#include "drivers/pci_msi.h"
+#endif
+#endif
+
+#ifdef RT_USING_POWER_SUPPLY
+#include "drivers/power_supply.h"
+#endif
+
+#ifdef RT_USING_REGULATOR
+#include "drivers/regulator.h"
+#endif
+
+#ifdef RT_USING_RESET
+#include "drivers/reset.h"
+#endif
+
+#ifdef RT_MFD_SYSCON
+#include "drivers/syscon.h"
+#endif
+
+#ifdef RT_USING_THERMAL
+#include "drivers/thermal.h"
+#endif
+
+#ifdef RT_USING_VIDEO
+#ifdef RT_VIDEO_BACKLIGHT
+#include "drivers/backlight.h"
+#endif
+#endif /* RT_USING_VIDEO */
 
 #ifdef RT_USING_VIRTIO
 #include "drivers/virtio.h"

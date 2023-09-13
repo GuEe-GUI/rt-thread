@@ -1,6 +1,8 @@
 Import('RTT_ROOT')
 from building import *
 
+objs = []
+
 cwd = GetCurrentDir()
 src = Split("""
 i2c_core.c
@@ -13,6 +15,15 @@ if GetDepend('RT_USING_I2C_BITOPS'):
 # The set of source files associated with this SConscript file.
 path = [cwd + '/../include']
 
+if GetDepend(['RT_USING_DM']):
+    src += ['i2c_bus.c', 'i2c_dm.c']
+
 group = DefineGroup('DeviceDrivers', src, depend = ['RT_USING_I2C'], CPPPATH = path)
 
-Return('group')
+for d in os.listdir(cwd):
+    path = os.path.join(cwd, d)
+    if os.path.isfile(os.path.join(path, 'SConscript')):
+        objs = objs + SConscript(os.path.join(d, 'SConscript'))
+objs = objs + group
+
+Return('objs')

@@ -1,0 +1,16 @@
+menuconfig RT_INPUT_KEYBOARD
+    bool "Keyboards"
+    default n
+
+config RT_INPUT_KEYBOARD_ADC_KEYS
+    bool "ADC Ladder Buttons"
+    depends on RT_INPUT_KEYBOARD
+    select RT_USING_OFW
+    select RT_USING_ADC
+    default n
+
+config RT_INPUT_KEYBOARD_GPIO_KEYS
+    bool "GPIO"
+    depends on RT_INPUT_KEYBOARD
+    select RT_USING_OFW
+    default n

@@ -7,9 +7,25 @@ if not GetDepend(['RT_USING_MFD']):
 
 cwd = GetCurrentDir()
 CPPPATH = [cwd + '/../include']
+src = []
+
+if GetDepend(['RT_MFD_BCM2835_PM']):
+    src += ['bcm2835-pm.c']
+
+if GetDepend(['RT_MFD_EDU']):
+    src += ['edu.c']
 
 if GetDepend(['RT_MFD_SYSCON']):
     src += ['mfd-syscon.c']
+
+if GetDepend(['RT_MFD_RK8XX']):
+    src += ['rk8xx.c']
+
+    if GetDepend(['RT_MFD_RK8XX_I2C']):
+        src += ['rk8xx-i2c.c']
+
+    if GetDepend(['RT_MFD_RK8XX_SPI']):
+        src += ['rk8xx-spi.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 

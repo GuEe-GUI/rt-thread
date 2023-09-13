@@ -8,11 +8,7 @@
  * 2022-11-26     GuEe-GUI     first version
  */
 
-#include <rthw.h>
-#include <rtthread.h>
-#include <rtdevice.h>
-
-#include <sys/time.h>
+#include "rtc_dm.h"
 
 #define PL031_DR        0x00    /* data read register */
 #define PL031_MR        0x04    /* match register */
@@ -34,6 +30,7 @@ struct pl031
 
     int irq;
     void *base;
+    struct rt_clk *pclk;
 
     struct rt_rtc_wkalarm wkalarm;
 };
@@ -186,69 +183,101 @@ const static struct rt_device_ops pl031_rtc_ops =
 };
 #endif
 
-static rt_err_t pl031_ofw_init(struct rt_platform_device *pdev, struct pl031 *pl031)
+static rt_err_t pl031_probe(struct rt_platform_device *pdev)
 {
     rt_err_t err = RT_EOK;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
+    const char *dev_name;
+    struct rt_device *dev = &pdev->parent;
+    struct pl031 *pl031 = rt_calloc(1, sizeof(*pl031));
 
-    pl031->base = rt_ofw_iomap(np, 0);
-
-    if (pl031->base)
+    if (!pl031)
     {
-        pl031->irq = rt_ofw_get_irq(np, 0);
-
-        if (pl031->irq >= 0)
-        {
-            rt_ofw_data(np) = &pl031->parent;
-        }
-        else
-        {
-            err = -RT_ERROR;
-        }
+        return -RT_ENOMEM;
     }
-    else
+
+    pl031->base = rt_dm_dev_iomap(dev, 0);
+
+    if (!pl031->base)
     {
         err = -RT_EIO;
+
+        goto _fail;
     }
+
+    pl031->irq = rt_dm_dev_get_irq(dev, 0);
+
+    if (pl031->irq < 0)
+    {
+        err = pl031->irq;
+
+        goto _fail;
+    }
+
+    pl031->pclk = rt_clk_get_by_name(dev, "apb_pclk");
+
+    if (rt_is_err(pl031->pclk))
+    {
+        err = rt_ptr_err(pl031->pclk);
+
+        goto _fail;
+    }
+
+    if ((err = rt_clk_prepare_enable(pl031->pclk)))
+    {
+        goto _fail;
+    }
+
+    dev->user_data = pl031;
+
+    pl031->parent.type = RT_Device_Class_RTC;
+#ifdef RT_USING_DEVICE_OPS
+    pl031->parent.ops = &pl031_rtc_ops;
+#else
+    pl031->parent.init = pl031_init;
+    pl031->parent.control = pl031_control;
+#endif
+
+    rtc_dev_set_name(&pl031->parent);
+    dev_name = rt_dm_dev_get_name(&pl031->parent);
+    rt_device_register(&pl031->parent, dev_name, RT_DEVICE_FLAG_RDWR);
+
+    rt_hw_interrupt_install(pl031->irq, pl031_isr, pl031, "rtc-pl031");
+    rt_hw_interrupt_umask(pl031->irq);
+
+    return RT_EOK;
+
+_fail:
+    if (pl031->base)
+    {
+        rt_iounmap(pl031->base);
+    }
+
+    if (pl031->pclk)
+    {
+        rt_clk_disable_unprepare(pl031->pclk);
+        rt_clk_put(pl031->pclk);
+    }
+
+    rt_free(pl031);
 
     return err;
 }
 
-static rt_err_t pl031_probe(struct rt_platform_device *pdev)
+static rt_err_t pl031_remove(struct rt_platform_device *pdev)
 {
-    rt_err_t err = RT_EOK;
-    struct pl031 *pl031 = rt_calloc(1, sizeof(*pl031));
+    struct pl031 *pl031 = pdev->parent.user_data;
 
-    if (pl031)
-    {
-        err = pl031_ofw_init(pdev, pl031);
-    }
-    else
-    {
-        err = -RT_ENOMEM;
-    }
+    rt_hw_interrupt_mask(pl031->irq);
+    rt_pic_detach_irq(pl031->irq, pl031);
 
-    if (!err)
-    {
-        pl031->parent.type = RT_Device_Class_RTC;
-    #ifdef RT_USING_DEVICE_OPS
-        pl031->parent.ops = &pl031_rtc_ops;
-    #else
-        pl031->parent.init = pl031_init;
-        pl031->parent.control = pl031_control;
-    #endif
+    rt_device_unregister(&pl031->parent);
 
-        rt_device_register(&pl031->parent, "rtc", RT_DEVICE_FLAG_RDWR);
+    rt_clk_disable_unprepare(pl031->pclk);
+    rt_clk_put(pl031->pclk);
 
-        rt_hw_interrupt_install(pl031->irq, pl031_isr, pl031, "rtc-pl031");
-        rt_hw_interrupt_umask(pl031->irq);
-    }
-    else
-    {
-        rt_free(pl031);
-    }
+    rt_free(pl031);
 
-    return err;
+    return RT_EOK;
 }
 
 static const struct rt_ofw_node_id pl031_ofw_ids[] =
@@ -263,5 +292,6 @@ static struct rt_platform_driver pl031_driver =
     .ids = pl031_ofw_ids,
 
     .probe = pl031_probe,
+    .remove = pl031_remove,
 };
 RT_PLATFORM_DRIVER_EXPORT(pl031_driver);

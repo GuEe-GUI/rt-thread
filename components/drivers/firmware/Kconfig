@@ -6,5 +6,22 @@ menuconfig RT_USING_FIRMWARE
 config RT_FIRMWARE_PSCI
     bool "Power State Coordination Interface (PSCI)"
     depends on RT_USING_FIRMWARE
-    select RT_USING_PM
+    select RT_USING_OFW
     default n
+
+config RT_FIRMWARE_QEMU_FW_CFG
+    bool "QEMU Firmware Configuration"
+    depends on RT_USING_FIRMWARE
+    select RT_USING_DFS
+    select RT_USING_DFS_DIRECTFS
+    default n
+
+config RT_FIRMWARE_RASPBERRYPI
+    bool "Raspberrypi Firmware"
+    depends on RT_USING_FIRMWARE
+    select RT_USING_OFW
+    select RT_USING_MBOX
+    select RT_USING_DMA
+    default n
+
+source "$RTT_DIR/components/drivers/firmware/arm_scmi/Kconfig"

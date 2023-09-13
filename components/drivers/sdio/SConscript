@@ -14,6 +14,19 @@ mmc.c
 # The set of source files associated with this SConscript file.
 path = [cwd + '/../include']
 
-group = DefineGroup('DeviceDrivers', src, depend = ['RT_USING_SDIO'], CPPPATH = path)
+if GetDepend(['RT_USING_DM']):
+    src += ['sdio_dm.c']
 
-Return('group')
+    if GetDepend(['RT_USING_REGULATOR']):
+        src += ['regulator.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = ['RT_USING_SDIO'], CPPPATH = path)
+objs = []
+
+for d in os.listdir(cwd):
+    path = os.path.join(cwd, d)
+    if os.path.isfile(os.path.join(path, 'SConscript')):
+        objs = objs + SConscript(os.path.join(d, 'SConscript'))
+objs = objs + group
+
+Return('objs')

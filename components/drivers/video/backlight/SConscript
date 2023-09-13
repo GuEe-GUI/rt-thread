@@ -1,0 +1,23 @@
+from building import *
+
+group   = []
+
+if not GetDepend(['RT_VIDEO_BACKLIGHT']):
+    Return('group')
+
+cwd     = GetCurrentDir()
+CPPPATH = [cwd + '/../../include']
+
+src     = ['backlight.c']
+
+if GetDepend(['RT_VIDEO_BACKLIGHT_GPIO']):
+    src += ['backlight-gpio.c']
+
+if GetDepend(['RT_VIDEO_BACKLIGHT_PWM']):
+    src += ['backlight-pwm.c']
+
+if GetDepend(['RT_VIDEO_BACKLIGHT_RPI']):
+    src += ['backlight-rpi.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+Return('group')

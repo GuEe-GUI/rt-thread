@@ -1,0 +1,13 @@
+menuconfig RT_INPUT_MISC
+    bool "Misc"
+    default n
+
+config RT_INPUT_MISC_E3X0_BUTTON
+    bool "NI Ettus Research USRP E3xx Button support"
+    depends on RT_INPUT_MISC
+    default n
+
+config RT_INPUT_MISC_RK8XX_PWRKEY
+    bool "Rockchip RK805/RK806/RK817 PMIC power key support"
+    depends on RT_INPUT_MISC
+    default n

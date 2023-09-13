@@ -11,10 +11,13 @@ CPPPATH = [cwd + '/../include']
 src = ['hwtimer.c']
 
 if GetDepend(['RT_HWTIMER_ARM_ARCH']):
-    src += ['hwtimer-arm-arch.c']
+    src += ['hwtimer-arm_arch.c']
 
-if GetDepend(['RT_HWTIMER_RISCV_CLINT']):
-    src += ['hwtimer-riscv-clint.c']
+if GetDepend(['RT_HWTIMER_BCM2835']):
+    src += ['hwtimer-bcm2835_timer.c']
+
+if GetDepend(['RT_HWTIMER_ROCKCHIP']):
+    src += ['hwtimer-rockchip_timer.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 

@@ -1,0 +1,15 @@
+menuconfig RT_USING_HWSPINLOCK
+    bool "Using Hardware Spinlock device drivers"
+    depends on RT_USING_DM
+    select RT_USING_OFW
+    select RT_USING_ADT_REF
+    default n
+    help
+      Hardware spinlock modules provide hardware assistance for
+      synchronization and mutual exclusion between heterogeneous processors
+      and those not operating under a single, shared operating system.
+
+config RT_HWSPINLOCK_ROCKCHIP
+    bool "Rockchip Hardware Spinlock device"
+    depends on RT_USING_HWSPINLOCK
+    default n

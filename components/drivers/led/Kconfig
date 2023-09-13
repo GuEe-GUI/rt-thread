@@ -1,0 +1,24 @@
+menuconfig RT_USING_LED
+    bool "Using Light Emitting Diode (LED) device drivers"
+    depends on RT_USING_DM
+    default n
+
+config RT_LED_GPIO
+    bool "GPIO connected LEDs Support"
+    depends on RT_USING_LED
+    depends on RT_USING_PINCTRL
+    depends on RT_USING_OFW
+    default n
+
+config RT_LED_PWM
+    bool "PWM driven LEDs Support"
+    depends on RT_USING_LED
+    depends on RT_USING_PWM
+    depends on RT_USING_OFW
+    default n
+
+config RT_LED_SYSCON
+    bool "System controllers connected LEDs Support"
+    depends on RT_USING_LED
+    depends on RT_MFD_SYSCON
+    default n

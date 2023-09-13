@@ -713,7 +713,7 @@ static void sensor(int argc, char **argv)
         else if (argc == 3)
         {
             mode = atoi(argv[2]);
-            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_POWER_MODE, (void *)mode) == RT_EOK)
+            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_POWER_MODE, (void *)(rt_ubase_t)mode) == RT_EOK)
             {
                 rt_kprintf("set new power mode as: %s\n", sensor_get_power_mode_name(&sensor->info));
             }
@@ -745,7 +745,7 @@ static void sensor(int argc, char **argv)
         else if (argc == 3)
         {
             mode = atoi(argv[2]);
-            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_ACCURACY_MODE, (void *)mode) == RT_EOK)
+            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_ACCURACY_MODE, (void *)(rt_ubase_t)mode) == RT_EOK)
             {
                 rt_kprintf("set new accuracy mode as: %s\n", sensor_get_accuracy_mode_name(&sensor->info));
             }
@@ -777,7 +777,7 @@ static void sensor(int argc, char **argv)
         else if (argc == 3)
         {
             mode = atoi(argv[2]);
-            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_FETCH_MODE, (void *)mode) == RT_EOK)
+            if (rt_device_control(dev, RT_SENSOR_CTRL_SET_FETCH_MODE, (void *)(rt_ubase_t)mode) == RT_EOK)
             {
                 rt_kprintf("set new fetch data mode as: %s\n", sensor_get_fetch_mode_name(&sensor->info));
             }

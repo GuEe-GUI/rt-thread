@@ -17,19 +17,19 @@
 
 #include <ioremap.h>
 
-#include "serial_internal.h"
+#include "serial_dm.h"
 
-#define PL011_OEIM          (1 << 10)   /* overrun error interrupt mask */
-#define PL011_BEIM          (1 << 9)    /* break error interrupt mask */
-#define PL011_PEIM          (1 << 8)    /* parity error interrupt mask */
-#define PL011_FEIM          (1 << 7)    /* framing error interrupt mask */
-#define PL011_RTIM          (1 << 6)    /* receive timeout interrupt mask */
-#define PL011_TXIM          (1 << 5)    /* transmit interrupt mask */
-#define PL011_RXIM          (1 << 4)    /* receive interrupt mask */
-#define PL011_DSRMIM        (1 << 3)    /* DSR interrupt mask */
-#define PL011_DCDMIM        (1 << 2)    /* DCD interrupt mask */
-#define PL011_CTSMIM        (1 << 1)    /* CTS interrupt mask */
-#define PL011_RIMIM         (1 << 0)    /* RI interrupt mask */
+#define PL011_OEIM          RT_BIT(10)  /* overrun error interrupt mask */
+#define PL011_BEIM          RT_BIT(9)   /* break error interrupt mask */
+#define PL011_PEIM          RT_BIT(8)   /* parity error interrupt mask */
+#define PL011_FEIM          RT_BIT(7)   /* framing error interrupt mask */
+#define PL011_RTIM          RT_BIT(6)   /* receive timeout interrupt mask */
+#define PL011_TXIM          RT_BIT(5)   /* transmit interrupt mask */
+#define PL011_RXIM          RT_BIT(4)   /* receive interrupt mask */
+#define PL011_DSRMIM        RT_BIT(3)   /* DSR interrupt mask */
+#define PL011_DCDMIM        RT_BIT(2)   /* DCD interrupt mask */
+#define PL011_CTSMIM        RT_BIT(1)   /* CTS interrupt mask */
+#define PL011_RIMIM         RT_BIT(0)   /* RI interrupt mask */
 
 #define PL011_DR            0x000
 #define PL011_FR            0x018
@@ -54,16 +54,16 @@
 
 #define PL011_LCRH_WLEN(n)  ((n - 5) << 5)
 
-#define PL011_CR_CTSEN      (1 << 15)
-#define PL011_CR_RTSEN      (1 << 14)
-#define PL011_CR_RTS        (1 << 11)
-#define PL011_CR_DTR        (1 << 10)
-#define PL011_CR_RXE        (1 << 9)
-#define PL011_CR_TXE        (1 << 8)
-#define PL011_CR_LBE        (1 << 7)
-#define PL011_CR_SIRLP      (1 << 2)
-#define PL011_CR_SIREN      (1 << 1)
-#define PL011_CR_UARTEN     (1 << 0)
+#define PL011_CR_CTSEN      RT_BIT(15)
+#define PL011_CR_RTSEN      RT_BIT(14)
+#define PL011_CR_RTS        RT_BIT(11)
+#define PL011_CR_DTR        RT_BIT(10)
+#define PL011_CR_RXE        RT_BIT(9)
+#define PL011_CR_TXE        RT_BIT(8)
+#define PL011_CR_LBE        RT_BIT(7)
+#define PL011_CR_SIRLP      RT_BIT(2)
+#define PL011_CR_SIREN      RT_BIT(1)
+#define PL011_CR_UARTEN     RT_BIT(0)
 
 struct pl011
 {
@@ -73,6 +73,7 @@ struct pl011
     void *base;
     rt_ubase_t freq;
     struct rt_clk *clk;
+    struct rt_clk *pclk;
 
     struct rt_spinlock spinlock;
 };
@@ -202,7 +203,6 @@ static void pl011_early_kick(struct rt_fdt_earlycon *con, int why)
     switch (why)
     {
     case FDT_EARLYCON_KICK_UPDATE:
-        rt_iounmap_early(pl011->base, con->size);
         pl011->base = rt_ioremap((void *)con->mmio, con->size);
         break;
 
@@ -220,11 +220,7 @@ static rt_err_t pl011_early_setup(struct rt_fdt_earlycon *con, const char *optio
     rt_err_t err = RT_EOK;
     static struct pl011 pl011 = { };
 
-    if (!options && con->mmio)
-    {
-        con->size = 0x1000;
-    }
-    else
+    if (options && !con->mmio)
     {
         char *arg;
 
@@ -245,8 +241,14 @@ static rt_err_t pl011_early_setup(struct rt_fdt_earlycon *con, const char *optio
             if (!con->mmio)
             {
                 con->mmio = (rt_ubase_t)serial_base_from_args(arg);
+                break;
             }
         }
+    }
+
+    if (!con->size)
+    {
+        con->size = 0x1000;
     }
 
     if (con->mmio)
@@ -270,82 +272,131 @@ static rt_err_t pl011_early_setup(struct rt_fdt_earlycon *con, const char *optio
 }
 RT_FDT_EARLYCON_EXPORT(pl011, "pl011", "arm,pl011", pl011_early_setup);
 
-static rt_err_t pl011_ofw_init(struct rt_platform_device *pdev, struct pl011 *pl011)
+static void pl011_free(struct pl011 *pl011)
 {
-    rt_err_t err = RT_EOK;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
-
-    pl011->base = rt_ofw_iomap(np, 0);
-
     if (pl011->base)
     {
-        pl011->clk = rt_ofw_get_clk(np, 0);
-        pl011->irq = rt_ofw_get_irq(np, 0);
-
-        if (pl011->clk && pl011->irq >= 0)
-        {
-            rt_ofw_data(np) = &pl011->parent;
-        }
-        else
-        {
-            err = -RT_ERROR;
-        }
+        rt_iounmap(pl011->base);
     }
-    else
+
+    if (!rt_is_err_or_null(pl011->clk))
     {
-        err = -RT_EIO;
+        rt_clk_disable(pl011->clk);
+        rt_clk_put(pl011->clk);
     }
 
-    return err;
+    if (!rt_is_err_or_null(pl011->pclk))
+    {
+        rt_clk_disable_unprepare(pl011->pclk);
+        rt_clk_put(pl011->pclk);
+    }
+
+    rt_free(pl011);
 }
 
 static rt_err_t pl011_probe(struct rt_platform_device *pdev)
 {
-    rt_err_t err = RT_EOK;
+    rt_err_t err;
+    const char *name;
+    char isr_name[RT_NAME_MAX];
+    struct rt_device *dev = &pdev->parent;
     struct pl011 *pl011 = rt_calloc(1, sizeof(*pl011));
+    struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT;
 
-    if (pl011)
+    if (!pl011)
     {
-        err = pl011_ofw_init(pdev, pl011);
-    }
-    else
-    {
-        err = -RT_ENOMEM;
+        return -RT_ENOMEM;
     }
 
-    if (!err)
+    pl011->base = rt_dm_dev_iomap(dev, 0);
+
+    if (!pl011->base)
     {
-        const char *name;
-        char isr_name[RT_NAME_MAX];
+        err = -RT_EIO;
 
-        struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT;
-
-        rt_clk_enable(pl011->clk);
-        pl011->freq = rt_clk_get_rate(pl011->clk);
-
-        pl011->parent.ops = &pl011_uart_ops;
-        pl011->parent.config = config;
-
-        rt_spin_lock_init(&pl011->spinlock);
-
-        serial_dev_set_name(&pl011->parent);
-        name = rt_dm_get_dev_name(&pl011->parent.parent);
-
-        rt_hw_serial_register(&pl011->parent, name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX, pl011);
-        rt_snprintf(isr_name, RT_NAME_MAX, "%s-pl011", name);
-        rt_hw_interrupt_install(pl011->irq, pl011_isr, pl011, isr_name);
+        goto _fail;
     }
-    else
+
+    pl011->irq = rt_dm_dev_get_irq(dev, 0);
+
+    if (pl011->irq < 0)
     {
-        rt_free(pl011);
+        err = pl011->irq;
+
+        goto _fail;
     }
+
+    pl011->clk = rt_clk_get_by_index(dev, 0);
+
+    if (rt_is_err(pl011->clk))
+    {
+        err = rt_ptr_err(pl011->clk);
+
+        goto _fail;
+    }
+
+    pl011->pclk = rt_clk_get_by_name(dev, "apb_pclk");
+
+    if (rt_is_err(pl011->pclk))
+    {
+        err = rt_ptr_err(pl011->pclk);
+
+        goto _fail;
+    }
+
+    if ((err = rt_clk_prepare_enable(pl011->pclk)))
+    {
+        goto _fail;
+    }
+
+    rt_dm_dev_bind_fwdata(&pl011->parent.parent, dev->ofw_node, &pl011->parent);
+
+    rt_clk_enable(pl011->clk);
+    pl011->freq = rt_clk_get_rate(pl011->clk);
+
+    dev->user_data = pl011;
+
+    pl011->parent.ops = &pl011_uart_ops;
+    pl011->parent.config = config;
+
+    rt_spin_lock_init(&pl011->spinlock);
+
+    serial_dev_set_name(&pl011->parent);
+    name = rt_dm_dev_get_name(&pl011->parent.parent);
+
+    rt_hw_serial_register(&pl011->parent, name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX, pl011);
+    rt_snprintf(isr_name, RT_NAME_MAX, "%s-pl011", name);
+    rt_hw_interrupt_install(pl011->irq, pl011_isr, pl011, isr_name);
+
+    return RT_EOK;
+
+_fail:
+    pl011_free(pl011);
 
     return err;
+}
+
+static rt_err_t pl011_remove(struct rt_platform_device *pdev)
+{
+    struct rt_device *dev = &pdev->parent;
+    struct pl011 *pl011 = dev->user_data;
+
+    rt_dm_dev_unbind_fwdata(dev, RT_NULL);
+
+    rt_hw_interrupt_mask(pl011->irq);
+    rt_pic_detach_irq(pl011->irq, pl011);
+
+    rt_device_unregister(&pl011->parent.parent);
+
+    pl011_free(pl011);
+
+    return RT_EOK;
 }
 
 static const struct rt_ofw_node_id pl011_ofw_ids[] =
 {
     { .type = "ttyAMA", .compatible = "arm,pl011" },
+    { .type = "ttyAMA", .compatible = "arm,pl011-axi" },
     { /* sentinel */ }
 };
 
@@ -355,9 +406,10 @@ static struct rt_platform_driver pl011_driver =
     .ids = pl011_ofw_ids,
 
     .probe = pl011_probe,
+    .remove = pl011_remove,
 };
 
-int pl011_drv_register(void)
+static int pl011_drv_register(void)
 {
     rt_platform_driver_register(&pl011_driver);
 

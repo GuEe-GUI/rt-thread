@@ -124,12 +124,12 @@
 #define GICR_TYPER_DirectLPIS   (1U << 3)
 #define GICR_TYPER_LAST         (1U << 4)
 #define GICR_TYPER_RVPEID       (1U << 7)
-#define GICR_TYPER_COM_LPI_AFF  GENMASK_ULL(25, 24)
-#define GICR_TYPER_AFFINITY     GENMASK_ULL(63, 32)
+#define GICR_TYPER_COM_LPI_AFF  RT_GENMASK_ULL(25, 24)
+#define GICR_TYPER_AFFINITY     RT_GENMASK_ULL(63, 32)
 
-#define GICR_INVLPIR_INTID      GENMASK_ULL(31, 0)
-#define GICR_INVLPIR_VPEID      GENMASK_ULL(47, 32)
-#define GICR_INVLPIR_V          GENMASK_ULL(63, 63)
+#define GICR_INVLPIR_INTID      RT_GENMASK_ULL(31, 0)
+#define GICR_INVLPIR_VPEID      RT_GENMASK_ULL(47, 32)
+#define GICR_INVLPIR_V          RT_GENMASK_ULL(63, 63)
 
 #define GICR_INVALLR_VPEID      GICR_INVLPIR_VPEID
 #define GICR_INVALLR_V          GICR_INVLPIR_V
@@ -145,70 +145,109 @@
 #define GICR_WAKER_ChildrenAsleep   (1U << 2)
 
 #define GICR_PROPBASER_IDBITS_MASK  (0x1f)
-#define GICR_PROPBASER_ADDRESS(x)   ((x) & GENMASK_ULL(51, 12))
-#define GICR_PENDBASER_ADDRESS(x)   ((x) & GENMASK_ULL(51, 16))
+#define GICR_PROPBASER_ADDRESS(x)   ((x) & RT_GENMASK_ULL(51, 12))
+#define GICR_PENDBASER_ADDRESS(x)   ((x) & RT_GENMASK_ULL(51, 16))
 
 /* ITS registers */
 #define GITS_CTLR               0x0000
 #define GITS_IIDR               0x0004
 #define GITS_TYPER              0x0008
-#define GITS_MPAMIDR            0x0010
-#define GITS_PARTIDR            0x0014
 #define GITS_MPIDR              0x0018
-#define GITS_STATUSR            0x0040
-#define GITS_UMSIR              0x0048
-#define GITS_CBASER             0x0048
+#define GITS_CBASER             0x0080
 #define GITS_CWRITER            0x0088
 #define GITS_CREADR             0x0090
-#define GITS_BASER              0x0100 /* 0x0100~0x0138 */
+#define GITS_BASER              0x0100
+#define GITS_IDREGS_BASE        0xffd0
+#define GITS_PIDR0              0xffe0
+#define GITS_PIDR1              0xffe4
+#define GITS_PIDR2              GICR_PIDR2
+#define GITS_PIDR4              0xffd0
+#define GITS_CIDR0              0xfff0
+#define GITS_CIDR1              0xfff4
+#define GITS_CIDR2              0xfff8
+#define GITS_CIDR3              0xfffc
+
+#define GITS_TRANSLATER         0x10040
+
+#define GITS_SGIR               0x20020
+
+#define GITS_SGIR_VPEID                         RT_GENMASK_ULL(47, 32)
+#define GITS_SGIR_VINTID                        RT_GENMASK_ULL(3, 0)
+
+#define GITS_CTLR_ENABLE                        (1U << 0)
+#define GITS_CTLR_ImDe                          (1U << 1)
+#define GITS_CTLR_ITS_NUMBER_SHIFT              4
+#define GITS_CTLR_ITS_NUMBER                    (0xFU << GITS_CTLR_ITS_NUMBER_SHIFT)
+#define GITS_CTLR_QUIESCENT                     (1U << 31)
+
+#define GITS_TYPER_PLPIS                        (1UL << 0)
+#define GITS_TYPER_VLPIS                        (1UL << 1)
+#define GITS_TYPER_ITT_ENTRY_SIZE_SHIFT         4
+#define GITS_TYPER_ITT_ENTRY_SIZE               RT_GENMASK_ULL(7, 4)
+#define GITS_TYPER_IDBITS_SHIFT                 8
+#define GITS_TYPER_DEVBITS_SHIFT                13
+#define GITS_TYPER_DEVBITS                      RT_GENMASK_ULL(17, 13)
+#define GITS_TYPER_PTA                          (1UL << 19)
+#define GITS_TYPER_HCC_SHIFT                    24
+#define GITS_TYPER_HCC(r)                       (((r) >> GITS_TYPER_HCC_SHIFT) & 0xff)
+#define GITS_TYPER_VMOVP                        (1ULL << 37)
+#define GITS_TYPER_VMAPP                        (1ULL << 40)
+#define GITS_TYPER_SVPET                        RT_GENMASK_ULL(42, 41)
 
 /*
  * ITS commands
  */
-#define GITS_CMD_MAPD           0x08
-#define GITS_CMD_MAPC           0x09
-#define GITS_CMD_MAPTI          0x0a
-#define GITS_CMD_MAPI           0x0b
-#define GITS_CMD_MOVI           0x01
-#define GITS_CMD_DISCARD        0x0f
-#define GITS_CMD_INV            0x0c
-#define GITS_CMD_MOVALL         0x0e
-#define GITS_CMD_INVALL         0x0d
-#define GITS_CMD_INT            0x03
-#define GITS_CMD_CLEAR          0x04
-#define GITS_CMD_SYNC           0x05
+#define GITS_CMD_MAPD                           0x08
+#define GITS_CMD_MAPC                           0x09
+#define GITS_CMD_MAPTI                          0x0a
+#define GITS_CMD_MAPI                           0x0b
+#define GITS_CMD_MOVI                           0x01
+#define GITS_CMD_DISCARD                        0x0f
+#define GITS_CMD_INV                            0x0c
+#define GITS_CMD_MOVALL                         0x0e
+#define GITS_CMD_INVALL                         0x0d
+#define GITS_CMD_INT                            0x03
+#define GITS_CMD_CLEAR                          0x04
+#define GITS_CMD_SYNC                           0x05
 
 /* ITS Config Area */
-#define GITS_LPI_CFG_GROUP1     (1 << 1)
-#define GITS_LPI_CFG_ENABLED    (1 << 0)
+#define GITS_LPI_CFG_GROUP1                     (1 << 1)
+#define GITS_LPI_CFG_ENABLED                    (1 << 0)
 
 /* ITS Command Queue Descriptor */
 #define GITS_CBASER_VALID                       (1UL << 63)
 #define GITS_CBASER_SHAREABILITY_SHIFT          (10)
 #define GITS_CBASER_INNER_CACHEABILITY_SHIFT    (59)
 #define GITS_CBASER_OUTER_CACHEABILITY_SHIFT    (53)
+#define GICR_PBASER_SHAREABILITY_SHIFT          (10)
+#define GICR_PBASER_INNER_CACHEABILITY_SHIFT    (7)
+#define GICR_PBASER_OUTER_CACHEABILITY_SHIFT    (56)
+
+#define GITS_TRANSLATION_TABLE_DESCRIPTORS_NR   8
 
 #define GITS_BASER_CACHEABILITY(reg, inner_outer, type) \
-    (GITS_CBASER_CACHE_##type << reg##_##inner_outer##_CACHEABILITY_SHIFT)
+    (GIC_BASER_CACHE_##type << reg##_##inner_outer##_CACHEABILITY_SHIFT)
 #define GITS_BASER_SHAREABILITY(reg, type)              \
-    (GITS_CBASER_##type << reg##_SHAREABILITY_SHIFT)
+    (GIC_BASER_##type << reg##_SHAREABILITY_SHIFT)
 
-#define GITS_CBASER_CACHE_DnGnRnE   0x0UL /* Device-nGnRnE. */
-#define GITS_CBASER_CACHE_NIN       0x1UL /* Normal Inner Non-cacheable. */
-#define GITS_CBASER_CACHE_NIRAWT    0x2UL /* Normal Inner Cacheable Read-allocate, Write-through. */
-#define GITS_CBASER_CACHE_NIRAWB    0x3UL /* Normal Inner Cacheable Read-allocate, Write-back. */
-#define GITS_CBASER_CACHE_NIWAWT    0x4UL /* Normal Inner Cacheable Write-allocate, Write-through. */
-#define GITS_CBASER_CACHE_NIWAWB    0x5UL /* Normal Inner Cacheable Write-allocate, Write-back. */
-#define GITS_CBASER_CACHE_NIRAWAWT  0x6UL /* Normal Inner Cacheable Read-allocate, Write-allocate, Write-through. */
-#define GITS_CBASER_CACHE_NIRAWAWB  0x7UL /* Normal Inner Cacheable Read-allocate, Write-allocate, Write-back. */
-#define GITS_CBASER_CACHE_MASK      0x7UL
-#define GITS_CBASER_SHARE_NS        0x0UL /* Non-shareable. */
-#define GITS_CBASER_SHARE_IS        0x1UL /* Inner Shareable. */
-#define GITS_CBASER_SHARE_OS        0x2UL /* Outer Shareable. */
-#define GITS_CBASER_SHARE_RES       0x3UL /* Reserved. Treated as 0b00 */
-#define GITS_CBASER_SHARE_MASK      0x3UL
+#define GIC_BASER_CACHE_DnGnRnE     0x0UL /* Device-nGnRnE. */
+#define GIC_BASER_CACHE_NIN         0x1UL /* Normal Inner Non-cacheable. */
+#define GIC_BASER_CACHE_NIRAWT      0x2UL /* Normal Inner Cacheable Read-allocate, Write-through. */
+#define GIC_BASER_CACHE_NIRAWB      0x3UL /* Normal Inner Cacheable Read-allocate, Write-back. */
+#define GIC_BASER_CACHE_NIWAWT      0x4UL /* Normal Inner Cacheable Write-allocate, Write-through. */
+#define GIC_BASER_CACHE_NIWAWB      0x5UL /* Normal Inner Cacheable Write-allocate, Write-back. */
+#define GIC_BASER_CACHE_NIRAWAWT    0x6UL /* Normal Inner Cacheable Read-allocate, Write-allocate, Write-through. */
+#define GIC_BASER_CACHE_NIRAWAWB    0x7UL /* Normal Inner Cacheable Read-allocate, Write-allocate, Write-back. */
+#define GIC_BASER_CACHE_MASK        0x7UL
+#define GIC_BASER_SHARE_NS          0x0UL /* Non-shareable. */
+#define GIC_BASER_SHARE_IS          0x1UL /* Inner Shareable. */
+#define GIC_BASER_SHARE_OS          0x2UL /* Outer Shareable. */
+#define GIC_BASER_SHARE_RES         0x3UL /* Reserved. Treated as 0b00 */
+#define GIC_BASER_SHARE_MASK        0x3UL
 
 #define GITS_CBASER_InnerShareable  GITS_BASER_SHAREABILITY(GITS_CBASER, SHARE_IS)
+#define GITS_CBASER_SHARE_MASK_ALL  GITS_BASER_SHAREABILITY(GITS_CBASER, SHARE_MASK)
+#define GITS_CBASER_INNER_MASK_ALL  GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, MASK)
 #define GITS_CBASER_nCnB            GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, DnGnRnE)
 #define GITS_CBASER_nC              GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, NIN)
 #define GITS_CBASER_RaWt            GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, NIRAWT)
@@ -217,6 +256,18 @@
 #define GITS_CBASER_WaWb            GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, NIWAWB)
 #define GITS_CBASER_RaWaWt          GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, NIRAWAWT)
 #define GITS_CBASER_RaWaWb          GITS_BASER_CACHEABILITY(GITS_CBASER, INNER, NIRAWAWB)
+
+#define GICR_PBASER_InnerShareable  GITS_BASER_SHAREABILITY(GICR_PBASER, SHARE_IS)
+#define GICR_PBASER_SHARE_MASK_ALL  GITS_BASER_SHAREABILITY(GICR_PBASER, SHARE_MASK)
+#define GICR_PBASER_INNER_MASK_ALL  GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, MASK)
+#define GICR_PBASER_nCnB            GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, DnGnRnE)
+#define GICR_PBASER_nC              GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIN)
+#define GICR_PBASER_RaWt            GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIRAWT)
+#define GICR_PBASER_RaWb            GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIRAWB)
+#define GICR_PBASER_WaWt            GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIWAWT)
+#define GICR_PBASER_WaWb            GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIWAWB)
+#define GICR_PBASER_RaWaWt          GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIRAWAWT)
+#define GICR_PBASER_RaWaWb          GITS_BASER_CACHEABILITY(GICR_PBASER, INNER, NIRAWAWB)
 
 #define GIC_EPPI_BASE_INTID         1056
 #define GIC_ESPI_BASE_INTID         4096
@@ -269,16 +320,18 @@ struct gicv3
     struct rt_pic parent;
 
     int version;
-    int max_irq;
+    int irq_nr;
     rt_uint32_t gicd_typer;
     rt_size_t line_nr;
     rt_size_t espi_nr;
+    rt_size_t lpi_nr;
     rt_ubase_t flags;
 
     void *dist_base;
     rt_size_t dist_size;
 
     void *redist_percpu_base[RT_CPUS_NR];
+    rt_uint64_t redist_percpu_flags[RT_CPUS_NR];
     rt_size_t percpu_ppi_nr[RT_CPUS_NR];
 
     struct

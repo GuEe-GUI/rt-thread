@@ -1,0 +1,3 @@
+menuconfig RT_USING_POWER_SUPPLY
+    bool "Using Power supply class support"
+    depends on RT_USING_DM

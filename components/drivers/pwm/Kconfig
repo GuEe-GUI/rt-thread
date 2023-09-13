@@ -1,0 +1,31 @@
+menuconfig RT_USING_PWM
+    bool "Using PWM device drivers"
+    default n
+
+config RT_PWM_BCM2835
+    bool "BCM2835 PWM support"
+    select RT_USING_PINCTRL
+    depends on RT_USING_DM
+    depends on RT_USING_PWM
+    default n
+
+config RT_PWM_BRCMSTB
+    bool "Broadcom STB PWM support"
+    select RT_USING_PINCTRL
+    depends on RT_USING_DM
+    depends on RT_USING_PWM
+    default n
+
+config RT_PWM_ROCKCHIP
+    bool "Rockchip PWM support"
+    select RT_USING_PINCTRL
+    depends on RT_USING_DM
+    depends on RT_USING_PWM
+    default n
+
+config RT_PWM_RP1
+    bool "RP1 PWM support"
+    select RT_USING_PINCTRL
+    depends on RT_USING_DM
+    depends on RT_USING_PWM
+    default n

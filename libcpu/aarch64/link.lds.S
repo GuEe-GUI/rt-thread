@@ -126,6 +126,15 @@ SECTIONS
         PROVIDE(__dtors_end = .);
     }
 
+    .note.gnu :
+    {
+    #ifdef RT_USING_CRASH_CORE
+        PROVIDE(__build_id_start = .);
+        *(.note.gnu.build-id)
+        PROVIDE(__build_id_end = .);
+    #endif
+    }
+
     . = ALIGN(16);
     .bss :
     {

@@ -10,8 +10,11 @@ CPPPATH = [cwd + '/../include']
 
 src = ['virtio.c', 'virtio_queue.c']
 
-if GetDepend(['RT_USING_OFW']):
+if GetDepend(['RT_VIRTIO_TRANSPORT_MMIO']):
     src += ['virtio_mmio.c']
+
+if GetDepend(['RT_VIRTIO_TRANSPORT_PCI']):
+    src += ['virtio_pci.c', 'virtio_pci_legacy.c', 'virtio_pci_modern.c']
 
 if GetDepend(['RT_VIRTIO_NET']):
     src += ['virtio-net.c']
@@ -30,6 +33,9 @@ if GetDepend(['RT_VIRTIO_RNG']):
 
 if GetDepend(['RT_VIRTIO_INPUT']):
     src += ['virtio-input.c']
+
+if GetDepend(['RT_VIRTIO_SOUND']):
+    src += ['virtio-sound.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 

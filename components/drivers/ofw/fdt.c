@@ -14,12 +14,17 @@
 #include <drivers/ofw_fdt.h>
 #include <drivers/ofw_raw.h>
 #include <drivers/core/rtdm.h>
+#ifdef RT_USING_OFW_DIRECTFS
+#include <dfs_fs.h>
+#include <dfs_directfs.h>
+#endif
 
 #define DBG_TAG "rtdm.ofw"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
 #include "ofw_internal.h"
+#include "../serial/serial_dm.h"
 
 struct rt_fdt_earlycon fdt_earlycon rt_section(".bss.noclean.earlycon");
 
@@ -79,14 +84,13 @@ rt_uint64_t rt_fdt_translate_address(void *fdt, int nodeoffset, rt_uint64_t addr
             int addr_cells;
             int size_cells;
         } local, cpu;
-        int parent, length, group_len;
+        int parent, length = 0, group_len;
         const fdt32_t *ranges = RT_NULL;
 
         parent = fdt_parent_offset(fdt, nodeoffset);
 
         if (parent >= 0)
         {
-            length = 0;
             ranges = fdt_getprop(fdt, nodeoffset, "ranges", &length);
         }
 
@@ -322,7 +326,7 @@ static rt_err_t fdt_reserved_memory_reg(int nodeoffset, const char *uname)
         }
         else
         {
-            while (len >= t_len)
+            for (; len >= t_len; len -= t_len)
             {
                 base = rt_fdt_next_cell(&prop, _root_addr_cells);
                 size = rt_fdt_next_cell(&prop, _root_size_cells);
@@ -334,8 +338,6 @@ static rt_err_t fdt_reserved_memory_reg(int nodeoffset, const char *uname)
 
                 base = rt_fdt_translate_address(_fdt, nodeoffset, base);
                 reserve_memregion(fdt_get_name(_fdt, nodeoffset, RT_NULL), base, size);
-
-                len -= t_len;
             }
         }
     }
@@ -665,12 +667,17 @@ void rt_fdt_earlycon_kick(int why)
         fdt_earlycon.console_kick(&fdt_earlycon, why);
     }
 
-    if (why == FDT_EARLYCON_KICK_COMPLETED && fdt_earlycon.msg_idx)
+    if (why == FDT_EARLYCON_KICK_COMPLETED)
     {
-        fdt_earlycon.msg_idx = 0;
+        fdt_earlycon.console_putc = RT_NULL;
 
-        /* Dump old messages */
-        rt_kputs(fdt_earlycon.msg);
+        if (fdt_earlycon.msg_idx)
+        {
+            fdt_earlycon.msg_idx = 0;
+
+            /* Dump old messages */
+            rt_kputs(fdt_earlycon.msg);
+        }
     }
 }
 
@@ -788,6 +795,8 @@ rt_err_t rt_fdt_scan_chosen_stdout(void)
                 if (options && *options && *options != ' ')
                 {
                     options_len = rt_strchrnul(options, ' ') - options;
+
+                    rt_strncpy(fdt_earlycon.options, options, options_len);
                 }
 
                 /* console > stdout-path */
@@ -825,7 +834,7 @@ rt_err_t rt_fdt_scan_chosen_stdout(void)
 
                 if (best_earlycon_id && best_earlycon_id->setup)
                 {
-                    rt_bool_t used_options = RT_FALSE;
+                    const char earlycon_magic[] = { 'O', 'F', 'W', '\0' };
 
                     if (!con_type)
                     {
@@ -834,24 +843,25 @@ rt_err_t rt_fdt_scan_chosen_stdout(void)
                     fdt_earlycon.fdt = _fdt;
                     fdt_earlycon.nodeoffset = offset;
 
-                    err = best_earlycon_id->setup(&fdt_earlycon, options);
+                    options = &fdt_earlycon.options[options_len + 1];
+                    rt_strncpy((void *)options, earlycon_magic, RT_ARRAY_SIZE(earlycon_magic));
 
-                    for (int i = 0; i < options_len; ++i)
+                    err = best_earlycon_id->setup(&fdt_earlycon, fdt_earlycon.options);
+
+                    if (rt_strncmp(options, earlycon_magic, RT_ARRAY_SIZE(earlycon_magic)))
                     {
-                        if (options[i] == RT_FDT_EARLYCON_OPTION_SIGNATURE)
+                        const char *option_start = options - 1;
+
+                        while (option_start[-1] != '\0')
                         {
-                            /* Restore ',' */
-                            ((char *)options)[i++] = ',';
-                            options = &options[i];
-                            options_len -= i;
-                            used_options = RT_TRUE;
-                            break;
+                            --option_start;
                         }
+
+                        rt_memmove(fdt_earlycon.options, option_start, options - option_start);
                     }
-                    if (!used_options)
+                    else
                     {
-                        options = RT_NULL;
-                        options_len = 0;
+                        fdt_earlycon.options[0] = '\0';
                     }
                 }
             }
@@ -878,8 +888,57 @@ rt_err_t rt_fdt_scan_chosen_stdout(void)
 
     if (fdt_earlycon.mmio)
     {
-        LOG_I("Earlycon: %s at MMIO/PIO %p (options '%.*s')",
-                con_type, fdt_earlycon.mmio, options_len, options ? options : "");
+        LOG_I("Earlycon: %s at MMIO/PIO %p (options '%s')",
+                con_type, fdt_earlycon.mmio, fdt_earlycon.options);
+    }
+
+    return err;
+}
+
+rt_err_t rt_fdt_bootargs_select(const char *key, int index, const char **out_result)
+{
+    rt_err_t err;
+
+    if (key && index >= 0 && out_result)
+    {
+        int offset = fdt_path_offset(_fdt, "/chosen");
+
+        if (offset >= 0)
+        {
+            int len, key_len = rt_strlen(key);
+            const char *bootargs = fdt_getprop(_fdt, offset, "bootargs", &len), *end;
+
+            end = bootargs + len;
+            err = -RT_EEMPTY;
+
+            for (int i = 0; bootargs < end; ++i)
+            {
+                bootargs = rt_strstr(bootargs, key);
+
+                if (!bootargs)
+                {
+                    break;
+                }
+
+                bootargs += key_len;
+
+                if (i == index)
+                {
+                    *out_result = bootargs;
+
+                    err = -RT_EOK;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            err = -RT_ERROR;
+        }
+    }
+    else
+    {
+        err = -RT_EINVAL;
     }
 
     return err;
@@ -936,6 +995,45 @@ rt_err_t rt_fdt_unflatten(void)
     return err;
 }
 
+#ifdef RT_USING_OFW_DIRECTFS
+static rt_ssize_t dts_directfs_read_raw(rt_object_t obj, struct directfs_bin_attribute *attr,
+        char *buffer, rt_off_t pos, rt_size_t count)
+{
+    rt_ssize_t res;
+    rt_size_t size;
+    struct rt_ofw_prop *prop = rt_container_of(obj, struct rt_ofw_prop, obj);
+
+    size = prop->length;
+
+    if (pos <= size)
+    {
+        if (count > size - pos)
+        {
+            count = size - pos;
+        }
+
+        rt_memcpy(buffer, prop->value + pos, count);
+
+        res = count;
+    }
+    else
+    {
+        res = -RT_EINVAL;
+    }
+
+    return res;
+}
+
+static struct directfs_bin_attribute dts_directfs_attr_raw =
+{
+    .attr =
+    {
+        .name = "raw",
+    },
+    .read = dts_directfs_read_raw,
+};
+#endif /* RT_USING_OFW_DIRECTFS */
+
 static rt_err_t fdt_unflatten_props(struct rt_ofw_node *np, int node_off)
 {
     rt_err_t err = RT_EOK;
@@ -963,6 +1061,11 @@ static rt_err_t fdt_unflatten_props(struct rt_ofw_node *np, int node_off)
         {
             np->name = prop->value;
         }
+
+    #ifdef RT_USING_OFW_DIRECTFS
+        dfs_directfs_create_link(&np->obj, &prop->obj, prop->name);
+        dfs_directfs_create_bin_file(&prop->obj, &dts_directfs_attr_raw);
+    #endif
 
         prop_off = fdt_next_property_offset(_fdt, prop_off);
 
@@ -1008,6 +1111,13 @@ static rt_err_t fdt_unflatten_single(struct rt_ofw_node *np, int node_off)
                 _phandle_max = np->phandle;
             }
         }
+
+    #ifdef RT_USING_OFW_DIRECTFS
+        if (parent)
+        {
+            dfs_directfs_create_link(&parent->obj, &np->obj, np->full_name);
+        }
+    #endif
 
         if ((err = fdt_unflatten_props(np, node_off)))
         {
@@ -1070,11 +1180,52 @@ static rt_err_t fdt_unflatten_single(struct rt_ofw_node *np, int node_off)
     return err;
 }
 
+#ifdef RT_USING_OFW_DIRECTFS
+static rt_ssize_t fdt_directfs_read_raw(rt_object_t obj, struct directfs_bin_attribute *attr,
+        char *buffer, rt_off_t pos, rt_size_t count)
+{
+    rt_ssize_t res;
+    void *fdt = ((struct fdt_info *)ofw_node_root->name)->fdt;
+    rt_size_t fdt_size = fdt_totalsize(fdt);
+
+    if (pos <= fdt_size)
+    {
+        if (count > fdt_size - pos)
+        {
+            count = fdt_size - pos;
+        }
+
+        rt_memcpy(buffer, fdt + pos, count);
+
+        res = count;
+    }
+    else
+    {
+        res = -RT_EINVAL;
+    }
+
+    return res;
+}
+
+static struct directfs_bin_attribute fdt_directfs_attr_raw =
+{
+    .attr =
+    {
+        .name = "raw",
+    },
+    .read = fdt_directfs_read_raw,
+};
+#endif /* RT_USING_OFW_DIRECTFS */
+
 struct rt_ofw_node *rt_fdt_unflatten_single(void *fdt)
 {
     int root_off;
     struct fdt_info *header;
     struct rt_ofw_node *root = RT_NULL;
+#ifdef RT_USING_OFW_DIRECTFS
+    rt_object_t fdt_fsobj;
+    rt_object_t firmware = dfs_directfs_find_object(RT_NULL, "firmware");
+#endif
 
     if (fdt && (root_off = fdt_path_offset(fdt, "/")) >= 0)
     {
@@ -1092,9 +1243,23 @@ struct rt_ofw_node *rt_fdt_unflatten_single(void *fdt)
         header->rsvmap = (struct fdt_reserve_entry *)((void *)fdt + fdt_off_mem_rsvmap(fdt));
         header->rsvmap_nr = fdt_num_mem_rsv(fdt);
 
+    #ifdef RT_USING_OFW_DIRECTFS
+        dfs_directfs_create_link(firmware, &root->obj, "devicetree");
+    #endif
+
         if (!fdt_unflatten_single(root, root_off))
         {
             root->name = (const char *)header;
+
+        #ifdef RT_USING_OFW_DIRECTFS
+            fdt_fsobj = rt_malloc(sizeof(*fdt_fsobj));
+
+            if (fdt_fsobj)
+            {
+                dfs_directfs_create_link(firmware, fdt_fsobj, "fdt");
+                dfs_directfs_create_bin_file(fdt_fsobj, &fdt_directfs_attr_raw);
+            }
+        #endif
         }
         else
         {

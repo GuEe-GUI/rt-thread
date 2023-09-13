@@ -10,8 +10,9 @@
 
 #include <rthw.h>
 #include <rtthread.h>
+#include <rtdevice.h>
 
-#define DBG_TAG "irqchip.bcm2836"
+#define DBG_TAG "pic.bcm2836"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
@@ -115,7 +116,7 @@ static void bcm2836_arm_l1_intc_irq_ack(struct rt_pic_irq *pirq)
     case LOCAL_IRQ_MAILBOX1:
     case LOCAL_IRQ_MAILBOX2:
     case LOCAL_IRQ_MAILBOX3:
-        HWREG32(intc.base + LOCAL_MAILBOX0_CLR0 + 16 * rt_hw_cpu_id()) = RT_BIT(data->hwirq);
+        HWREG32(intc.base + LOCAL_MAILBOX0_CLR0 + 16 * rt_hw_cpu_id()) = RT_BIT(pirq->hwirq);
         break;
     default:
         break;
@@ -124,7 +125,7 @@ static void bcm2836_arm_l1_intc_irq_ack(struct rt_pic_irq *pirq)
 
 static void bcm2836_arm_l1_intc_irq_mask(struct rt_pic_irq *pirq)
 {
-    bcm2836_arm_irqchip_irq_ops(data->hwirq, RT_TRUE);
+    bcm2836_arm_irqchip_irq_ops(pirq->hwirq, RT_TRUE);
 }
 
 static void bcm2836_arm_l1_intc_irq_unmask(struct rt_pic_irq *pirq)
@@ -149,7 +150,7 @@ static void bcm2836_arm_l1_intc_irq_send_ipi(struct rt_pic_irq *pirq, bitmap_t *
     }
 }
 
-static int bcm2836_arm_l1_intc_irq_map(struct rt_irq_chip_desc *chip_desc, int hwirq, struct rt_irq_info *init_info)
+static int bcm2836_arm_l1_intc_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
 {
     return rt_pic_config_irq(pic, hwirq, hwirq);
 }
@@ -157,7 +158,7 @@ static int bcm2836_arm_l1_intc_irq_map(struct rt_irq_chip_desc *chip_desc, int h
 static rt_err_t bcm2836_arm_l1_intc_irq_parse(struct rt_pic *pic,
         struct rt_ofw_cell_args *args, struct rt_pic_irq *out_pirq)
 {
-    rt_err_t ret = RT_EOK;
+    rt_err_t err = RT_EOK;
 
     if (args->args_count == 2)
     {
@@ -166,13 +167,13 @@ static rt_err_t bcm2836_arm_l1_intc_irq_parse(struct rt_pic *pic,
     }
     else
     {
-        ret = -RT_EINVAL;
+        err = -RT_EINVAL;
     }
 
-    return ret;
+    return err;
 }
 
-static struct rt_pic_ops bcm2836_arm_l1_intc_ops =
+const static struct rt_pic_ops bcm2836_arm_l1_intc_ops =
 {
     .name = "BCM2836-ARM-L1-INTC",
     .irq_ack = bcm2836_arm_l1_intc_irq_ack,
@@ -232,7 +233,7 @@ static rt_err_t bcm2836_arm_l1_intc_init(struct rt_ofw_node *np, const struct rt
 {
     rt_err_t err = RT_EOK;
 
-    intc.base = rt_ofw_iomap(node, 0);
+    intc.base = rt_ofw_iomap(np, 0);
 
     if (intc.base)
     {
@@ -244,6 +245,11 @@ static rt_err_t bcm2836_arm_l1_intc_init(struct rt_ofw_node *np, const struct rt
 
         rt_pic_linear_irq(&intc.parent, LAST_IRQ + 1);
 
+        for (int ipi = 0; ipi < 2; ++ipi)
+        {
+            rt_pic_config_ipi(&intc.parent, ipi, LOCAL_IRQ_MAILBOX0 + ipi);
+        }
+
         rt_pic_add_traps(bcm2836_arm_l1_intc_handler, &intc);
     }
     else
@@ -254,9 +260,9 @@ static rt_err_t bcm2836_arm_l1_intc_init(struct rt_ofw_node *np, const struct rt
     return err;
 }
 
-static const struct rt_ofw_ofw_id bcm2836_arm_l1_intc_ofw_ids[] =
+static const struct rt_ofw_node_id bcm2836_arm_l1_intc_ofw_ids[] =
 {
     { .compatible = "brcm,bcm2836-l1-intc" },
     { /* sentinel */ }
 };
-RT_OF_DECLARE_CORE(bcm2836_arm_l1_intc, bcm2836_arm_l1_intc_ofw_ids, bcm2836_arm_l1_intc_init);
+RT_PIC_OFW_DECLARE(bcm2836_arm_l1_intc, bcm2836_arm_l1_intc_ofw_ids, bcm2836_arm_l1_intc_init);

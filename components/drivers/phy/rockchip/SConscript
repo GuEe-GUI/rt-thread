@@ -1,0 +1,17 @@
+from building import *
+
+group = []
+cwd = GetCurrentDir()
+CPPPATH = [cwd + '/../../include']
+
+src = []
+
+if GetDepend(['RT_PHY_ROCKCHIP_NANENG_COMBO']):
+    src += ['phy-rockchip-naneng-combphy.c']
+
+if GetDepend(['RT_PHY_ROCKCHIP_SNPS_PCIE3']):
+    src += ['phy-rockchip-snps-pcie3.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
+Return('group')

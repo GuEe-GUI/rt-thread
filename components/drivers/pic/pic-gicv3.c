@@ -35,6 +35,7 @@
 static int _init_cpu_id;
 static struct gicv3 _gic;
 static rt_bool_t _gicv3_eoi_mode_ns = RT_FALSE;
+static rt_bool_t _gicv3_arm64_2941627_erratum = RT_FALSE;
 
 enum
 {
@@ -257,7 +258,20 @@ static void gicv3_dist_init(void)
         HWREG64(base + GICD_IROUTERnE + i * 8) = affinity;
     }
 
-    _gic.max_irq = rt_min_t(int, MAX_HANDLERS - 1, RT_GENMASK(23, 0));
+    if (GICD_TYPER_NUM_LPIS(_gic.gicd_typer))
+    {
+        /* Max LPI = 8192 + Math.pow(2, num_LPIs + 1) - 1 */
+        rt_size_t num_lpis = (1 << (GICD_TYPER_NUM_LPIS(_gic.gicd_typer) + 1)) + 1;
+
+        _gic.lpi_nr = rt_min_t(int, num_lpis, 1 << GICD_TYPER_ID_BITS(_gic.gicd_typer));
+    }
+    else
+    {
+        _gic.lpi_nr = 1 << GICD_TYPER_ID_BITS(_gic.gicd_typer);
+    }
+
+    /* SPI + eSPI + LPIs */
+    _gic.irq_nr = _gic.line_nr - 32 + _gic.espi_nr + _gic.lpi_nr;
 }
 
 static void gicv3_redist_enable(rt_bool_t enable)
@@ -455,8 +469,11 @@ static void gicv3_irq_eoi(struct rt_pic_irq *pirq)
             write_gicreg(ICC_EOIR1_SYS, hwirq);
             rt_hw_isb();
 
-            write_gicreg(ICC_DIR_SYS, hwirq);
-            rt_hw_isb();
+            if (!_gicv3_arm64_2941627_erratum)
+            {
+                write_gicreg(ICC_DIR_SYS, hwirq);
+                rt_hw_isb();
+            }
         }
     }
 }
@@ -477,7 +494,7 @@ static rt_err_t gicv3_irq_set_priority(struct rt_pic_irq *pirq, rt_uint32_t prio
     }
 
     offset = gicv3_hwirq_convert_offset_index(hwirq, GICD_IPRIORITYR, &index);
-    HWREG32(base + offset + index) = priority;
+    HWREG8(base + offset + index) = priority;
 
     return RT_EOK;
 }
@@ -485,7 +502,7 @@ static rt_err_t gicv3_irq_set_priority(struct rt_pic_irq *pirq, rt_uint32_t prio
 static rt_err_t gicv3_irq_set_affinity(struct rt_pic_irq *pirq, bitmap_t *affinity)
 {
     rt_err_t ret = RT_EOK;
-	rt_uint64_t val;
+    rt_uint64_t val;
     rt_ubase_t mpidr;
     rt_uint32_t offset, index;
     int hwirq = pirq->hwirq, cpu_id = bitmap_next_set_bit(affinity, 0, RT_CPUS_NR);
@@ -537,7 +554,7 @@ static void gicv3_irq_send_ipi(struct rt_pic_irq *pirq, bitmap_t *cpumask)
 {
 #define __mpidr_to_sgi_affinity(cluster_id, level)  \
     (MPIDR_AFFINITY_LEVEL(cluster_id, level) << ICC_SGI1R_AFFINITY_##level##_SHIFT)
-    int cpu_id, limit;
+    int cpu_id, last_cpu_id, limit;
     rt_uint64_t initid, range_sel, target_list, cluster_id;
 
     range_sel = 0;
@@ -551,6 +568,7 @@ static void gicv3_irq_send_ipi(struct rt_pic_irq *pirq, bitmap_t *cpumask)
         target_list = 1 << ((mpidr & MPIDR_LEVEL_MASK) % ICC_SGI1R_TARGET_LIST_MAX);
         limit = rt_min(cpu_id + ICC_SGI1R_TARGET_LIST_MAX, RT_CPUS_NR);
 
+        last_cpu_id = cpu_id;
         bitmap_for_each_set_bit_from(cpumask, cpu_id, cpu_id, limit)
         {
             rt_uint64_t mpidr = rt_cpu_mpidr_table[cpu_id];
@@ -558,9 +576,12 @@ static void gicv3_irq_send_ipi(struct rt_pic_irq *pirq, bitmap_t *cpumask)
             if (cluster_id != (mpidr & (~MPIDR_LEVEL_MASK)))
             {
                 range_sel = 0;
+                /* Don't break next cpuid */
+                cpu_id = last_cpu_id;
                 break;
             }
 
+            last_cpu_id = cpu_id;
             target_list |= 1 << ((mpidr & MPIDR_LEVEL_MASK) % ICC_SGI1R_TARGET_LIST_MAX);
         }
 
@@ -581,8 +602,19 @@ static void gicv3_irq_send_ipi(struct rt_pic_irq *pirq, bitmap_t *cpumask)
 
 static int gicv3_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
 {
-    int irq, irq_index = hwirq - GIC_SGI_NR;
-    struct rt_pic_irq *pirq = rt_pic_find_irq(pic, irq_index);
+    struct rt_pic_irq *pirq;
+    int irq, hwirq_type, irq_index;
+
+    hwirq_type = gicv3_hwirq_type(hwirq);
+    if (hwirq_type != LPI_TYPE)
+    {
+        irq_index = hwirq - GIC_SGI_NR;
+    }
+    else
+    {
+        irq_index = _gic.irq_nr - _gic.lpi_nr + hwirq - 8192;
+    }
+    pirq = rt_pic_find_irq(pic, irq_index);
 
     if (pirq && hwirq >= GIC_SGI_NR)
     {
@@ -599,6 +631,11 @@ static int gicv3_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
         }
 
         irq = rt_pic_config_irq(pic, irq_index, hwirq);
+
+        if (irq >= 0 && mode != RT_IRQ_MODE_LEVEL_HIGH)
+        {
+            gicv3_irq_set_triger_mode(pirq, mode);
+        }
     }
     else
     {
@@ -664,7 +701,7 @@ static rt_err_t gicv3_irq_parse(struct rt_pic *pic, struct rt_ofw_cell_args *arg
     return err;
 }
 
-static struct rt_pic_ops gicv3_ops =
+const static struct rt_pic_ops gicv3_ops =
 {
     .name = "GICv3",
     .irq_init = gicv3_irq_init,
@@ -724,12 +761,32 @@ static rt_err_t gicv3_enable_quirk_msm8996(void *data)
     return RT_EOK;
 }
 
+static rt_err_t gicv3_enable_quirk_arm64_2941627(void *data)
+{
+    _gicv3_arm64_2941627_erratum = RT_TRUE;
+    return RT_EOK;
+}
+
 static const struct gic_quirk _gicv3_quirks[] =
 {
     {
         .desc       = "GICv3: Qualcomm MSM8996 broken firmware",
         .compatible = "qcom,msm8996-gic-v3",
         .init       = gicv3_enable_quirk_msm8996,
+    },
+    {
+        /* GIC-700: 2941627 workaround - IP variant [0,1] */
+        .desc       = "GICv3: ARM64 erratum 2941627",
+        .iidr       = 0x0400043b,
+        .iidr_mask  = 0xff0e0fff,
+        .init       = gicv3_enable_quirk_arm64_2941627,
+    },
+    {
+        /* GIC-700: 2941627 workaround - IP variant [2] */
+        .desc       = "GICv3: ARM64 erratum 2941627",
+        .iidr       = 0x0402043b,
+        .iidr_mask  = 0xff0f0fff,
+        .init       = gicv3_enable_quirk_arm64_2941627,
     },
     { /* sentinel */ }
 };
@@ -786,7 +843,6 @@ static rt_err_t gicv3_iomap_init(rt_uint64_t *regs)
 
         /* ArchRev[4:7] */
         _gic.version = HWREG32(_gic.dist_base + GICD_PIDR2) >> 4;
-        gic_common_init_quirk_hw(HWREG32(_gic.dist_base + GICD_IIDR), _gicv3_quirks, &_gic.parent);
     } while (0);
 
     if (ret && idx >= 0)
@@ -825,7 +881,7 @@ static void gicv3_init(void)
     _gic.parent.priv_data = &_gic;
     _gic.parent.ops = &gicv3_ops;
 
-    rt_pic_linear_irq(&_gic.parent, _gic.max_irq + 1 - GIC_SGI_NR);
+    rt_pic_linear_irq(&_gic.parent, _gic.irq_nr - GIC_SGI_NR);
     gic_common_sgi_config(_gic.dist_base, &_gic.parent, 0);
 
     rt_pic_add_traps(gicv3_handler, &_gic);
@@ -857,11 +913,11 @@ static void gicv3_init_fail(void)
 
 static rt_err_t gicv3_ofw_init(struct rt_ofw_node *np, const struct rt_ofw_node_id *id)
 {
-    rt_err_t ret = RT_EOK;
+    rt_err_t err = RT_EOK;
 
     do {
         rt_size_t reg_nr_max;
-    	rt_err_t msi_init = -RT_ENOSYS;
+        rt_err_t msi_init = -RT_ENOSYS;
         rt_uint32_t redist_regions_nr;
         rt_uint64_t *regs, redist_stride;
 
@@ -876,14 +932,17 @@ static rt_err_t gicv3_ofw_init(struct rt_ofw_node *np, const struct rt_ofw_node_
 
         if (!regs)
         {
-            ret = -RT_ENOMEM;
+            err = -RT_ENOMEM;
             break;
         }
 
         rt_ofw_get_address_array(np, reg_nr_max, regs);
         _gic.redist_regions_nr = redist_regions_nr;
 
-        if ((ret = gicv3_iomap_init(regs)))
+        err = gicv3_iomap_init(regs);
+        rt_free(regs);
+
+        if (err)
         {
             break;
         }
@@ -891,7 +950,7 @@ static rt_err_t gicv3_ofw_init(struct rt_ofw_node *np, const struct rt_ofw_node_
         if (_gic.version != 3 && _gic.version != 4)
         {
             LOG_E("Version = %d is not support", _gic.version);
-            ret = -RT_EINVAL;
+            err = -RT_EINVAL;
             break;
         }
 
@@ -919,12 +978,12 @@ static rt_err_t gicv3_ofw_init(struct rt_ofw_node *np, const struct rt_ofw_node_
         }
     } while (0);
 
-    if (ret)
+    if (err)
     {
         gicv3_init_fail();
     }
 
-    return ret;
+    return err;
 }
 
 static const struct rt_ofw_node_id gicv3_ofw_ids[] =

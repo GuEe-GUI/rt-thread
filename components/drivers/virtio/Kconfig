@@ -3,15 +3,28 @@ menuconfig RT_USING_VIRTIO
     depends on RT_USING_DM
     default n
 
+config RT_VIRTIO_TRANSPORT_MMIO
+    bool "Using VirtIO MMIO transport"
+    depends on RT_USING_VIRTIO
+    select RT_USING_OFW
+    default y
+
+config RT_VIRTIO_TRANSPORT_PCI
+    bool "Using VirtIO PCI transport"
+    depends on RT_USING_VIRTIO
+    select RT_USING_PCI
+    default y
+
 config RT_VIRTIO_NET
     bool "VirtIO Net"
-    select RT_USING_LWIP
     depends on RT_USING_VIRTIO
+    select RT_USING_LWIP
     default y
 
 config RT_VIRTIO_BLK
     bool "VirtIO BLK"
     depends on RT_USING_VIRTIO
+    select RT_USING_BLK
     default y
 
 config RT_VIRTIO_CONSOLE
@@ -21,9 +34,9 @@ config RT_VIRTIO_CONSOLE
 
 config RT_VIRTIO_RNG
     bool "VirtIO RNG"
+    depends on RT_USING_VIRTIO
     select RT_USING_HWCRYPTO
     select RT_HWCRYPTO_USING_RNG
-    depends on RT_USING_VIRTIO
     default y
 
 config RT_VIRTIO_GPU
@@ -34,4 +47,10 @@ config RT_VIRTIO_GPU
 config RT_VIRTIO_INPUT
     bool "VirtIO Input"
     depends on RT_USING_VIRTIO
+    default y
+
+config RT_VIRTIO_SOUND
+    bool "VirtIO Sound"
+    depends on RT_USING_VIRTIO
+    select RT_USING_AUDIO
     default y

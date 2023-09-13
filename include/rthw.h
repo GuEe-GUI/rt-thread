@@ -163,6 +163,7 @@ void rt_hw_us_delay(rt_uint32_t us);
 
 #ifdef RT_USING_SMP
 #include <cpuport.h> /* for spinlock from arch */
+#include <rtatomic.h>
 
 struct rt_spinlock
 {
@@ -171,6 +172,17 @@ struct rt_spinlock
 
 void rt_hw_spin_lock_init(rt_hw_spinlock_t *lock);
 void rt_hw_spin_lock(rt_hw_spinlock_t *lock);
+rt_inline rt_bool_t rt_hw_spin_trylock(rt_hw_spinlock_t *lock)
+{
+    volatile rt_atomic_t old = (rt_uint32_t)rt_atomic_load((rt_atomic_t *)lock);
+
+    if ((old >> 16) != (old & 0xffff))
+    {
+        return RT_FALSE;
+    }
+
+    return rt_atomic_compare_exchange_strong((rt_atomic_t *)&lock->slock, &old, old + (1 << 16));
+}
 void rt_hw_spin_unlock(rt_hw_spinlock_t *lock);
 
 int rt_hw_cpu_id(void);

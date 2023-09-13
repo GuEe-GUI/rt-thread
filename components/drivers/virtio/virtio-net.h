@@ -60,7 +60,7 @@ struct virtio_net_hdr
     rt_uint16_t csum_start;
     rt_uint16_t csum_offset;
     rt_uint16_t num_buffers;
-} __attribute__ ((packed));
+} rt_packed;
 
 #define VIRTIO_NET_MSS  1514
 
@@ -77,6 +77,6 @@ struct virtio_net_config
     rt_uint8_t rss_max_key_size;
     rt_uint16_t rss_max_indirection_table_length;
     rt_uint32_t supported_hash_types;
-} __attribute__((packed));
+} rt_packed;
 
 #endif /* __VIRTIO_NET_H__ */

@@ -1,9 +1,9 @@
 menuconfig RT_USING_OFW
     bool "Using Open Firmware (OFW)"
+    depends on RT_USING_DM
     select RT_USING_ADT
     select RT_USING_ADT_REF
     select RT_USING_ADT_BITMAP
-    depends on RT_USING_DM
     default n
 
 config RT_USING_BUILTIN_FDT
@@ -20,3 +20,10 @@ config RT_FDT_EARLYCON_MSG_SIZE
     int "Earlycon message buffer size (KB)"
     depends on RT_USING_OFW
     default 128
+
+config RT_USING_OFW_DIRECTFS
+    bool "Export fdt in direct access"
+    depends on RT_USING_OFW
+    select RT_USING_DFS
+    select RT_USING_DFS_DIRECTFS
+    default n

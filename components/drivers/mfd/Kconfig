@@ -1,9 +1,46 @@
 menuconfig RT_USING_MFD
-    bool "Using Multifunction Device Drivers"
+    bool "Using Multifunction device drivers"
     depends on RT_USING_DM
+    default n
+
+config RT_MFD_BCM2835_PM
+    bool "BCM2835 PM driver"
+    depends on RT_USING_MFD
+    default n
+
+config RT_MFD_EDU
+    bool "Educational device driver"
+    depends on RT_USING_MFD
+    select RT_USING_PCI
+    select RT_USING_DMA
     default n
 
 config RT_MFD_SYSCON
     bool "System Controller Register R/W"
     depends on RT_USING_MFD
+    select RT_USING_OFW
     default y
+
+config RT_MFD_RK8XX
+    bool
+    depends on RT_USING_MFD
+    select RT_USING_PIC
+    default n
+
+config RT_MFD_RK8XX_I2C
+    bool "Rockchip RK805/RK808/RK809/RK817/RK818 Power Management Chip"
+    depends on RT_USING_MFD
+    select RT_MFD_RK8XX
+    select RT_USING_OFW
+    select RT_USING_I2C
+    select RT_MFD_SYSCON
+    default n
+
+config RT_MFD_RK8XX_SPI
+    bool "Rockchip RK806 Power Management Chip"
+    depends on RT_USING_MFD
+    select RT_MFD_RK8XX
+    select RT_USING_OFW
+    select RT_USING_SPI
+    select RT_MFD_SYSCON
+    default n

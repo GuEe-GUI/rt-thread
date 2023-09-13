@@ -103,6 +103,32 @@ void rt_spin_lock(struct rt_spinlock *lock)
 RTM_EXPORT(rt_spin_lock)
 
 /**
+ * @brief   This function will try to lock the spinlock.
+ *
+ * @note    If the spinlock is locked, the current CPU will return error.
+ *
+ * @param   lock is a pointer to the spinlock.
+ */
+rt_err_t rt_spin_trylock(struct rt_spinlock *lock)
+{
+    rt_err_t err;
+#ifdef RT_USING_SMP
+    _cpu_preempt_disable();
+
+    if ((err = rt_hw_spin_trylock(&lock->lock)))
+    {
+        _cpu_preempt_enable();
+    }
+#else
+    rt_enter_critical();
+    err = RT_EOK;
+#endif
+
+    return err;
+}
+RTM_EXPORT(rt_spin_trylock)
+
+/**
  * @brief   This function will unlock the spinlock.
  *
  * @param   lock is a pointer to the spinlock.
@@ -144,6 +170,36 @@ rt_base_t rt_spin_lock_irqsave(struct rt_spinlock *lock)
 #endif
 }
 RTM_EXPORT(rt_spin_lock_irqsave)
+
+#ifdef RT_USING_SMP
+/**
+ * @brief   This function will try to lock the spinlock.
+ *
+ * @note    If the spinlock is locked, the current CPU will return error.
+ *
+ * @param   lock is a pointer to the spinlock.
+ */
+rt_err_t rt_spin_trylock_irqsave(struct rt_spinlock *lock, rt_ubase_t *out_level)
+{
+    rt_err_t res;
+
+    rt_ubase_t level = rt_hw_local_irq_disable();
+
+    RT_ASSERT(out_level != RT_NULL);
+    res = rt_spin_trylock(lock);
+
+    if (!res)
+    {
+        *out_level = level;
+    }
+    else
+    {
+        rt_hw_local_irq_enable(level);
+    }
+
+    return res;
+}
+#endif
 
 /**
  * @brief   This function will unlock the spinlock and then restore current cpu interrupt status.

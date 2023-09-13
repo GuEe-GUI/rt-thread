@@ -8,14 +8,7 @@
  * 2022-11-16     GuEe-GUI     first version
  */
 
-#include <rtthread.h>
-#include <rtservice.h>
-
-#include <ioremap.h>
-#include <cpuport.h>
-
-#include <serial8250.h>
-#include <serial_internal.h>
+#include "8250.h"
 
 struct serial8250 early_serial8250 = { 0 };
 
@@ -55,8 +48,8 @@ static void init_serial(struct serial8250 *serial)
 
     serial8250_early_out(serial, UART_LCR, 0x3);    /* 8n1 */
     ier = serial8250_early_in(serial, UART_IER);
-    serial8250_early_out(serial, UART_IER, ier & UART_IER_UUE); /* no interrupt */
-    serial8250_early_out(serial, UART_FCR, 0);      /* no fifo */
+    serial8250_early_out(serial, UART_IER, ier & UART_IER_UUE); /* No interrupt */
+    serial8250_early_out(serial, UART_FCR, 0);      /* No fifo */
     serial8250_early_out(serial, UART_MCR, 0x3);    /* DTR + RTS */
 
     if (serial->freq)
@@ -70,30 +63,50 @@ static void init_serial(struct serial8250 *serial)
     }
 }
 
-rt_err_t serial8250_early_of_setup(struct serial8250 *serial, struct rt_of_earlycon_desc *desc, const char *options)
+static void serial8250_early_kick(struct rt_fdt_earlycon *con, int why)
+{
+    struct serial8250 *serial = raw_to_serial8250(con->data);
+
+    switch (why)
+    {
+    case FDT_EARLYCON_KICK_UPDATE:
+        serial->base = rt_ioremap((void *)con->mmio, con->size);
+        break;
+
+    case FDT_EARLYCON_KICK_COMPLETED:
+        rt_iounmap(serial->base);
+        break;
+
+    default:
+        break;
+    }
+}
+
+rt_err_t serial8250_early_fdt_setup(struct serial8250 *serial, struct rt_fdt_earlycon *con, const char *options)
 {
     rt_err_t ret = RT_EOK;
 
-    if (!serial->base && desc)
+    if (!serial->base && con)
     {
         serial8250_config(serial, options);
-        desc->mmio = (rt_ubase_t)serial->base;
-        desc->size = serial->size;
+        con->mmio = (rt_ubase_t)serial->base;
+        con->size = serial->size;
     }
 
-    if (serial->base && desc)
+    if (serial->base && con)
     {
-        serial->base = rt_ioremap((void *)serial->base, serial->size);
+        serial->base = rt_ioremap_early((void *)serial->base, serial->size);
     }
 
-    if (serial->base && desc)
+    if (serial->base && con)
     {
-        desc->console_putc = (typeof(desc->console_putc))&serial8250_early_putc;
-        desc->data = &serial->parent;
+        con->console_putc = (typeof(con->console_putc))&serial8250_early_putc;
+        con->console_kick = serial8250_early_kick;
+        con->data = &serial->parent;
 
         if (!serial->parent.config.baud_rate)
         {
-            /* assume the device was initialized, only mask interrupts */
+            /* Assume the device was initialized, only mask interrupts */
             rt_uint32_t ier = serial8250_early_in(serial, UART_IER);
             serial8250_early_out(serial, UART_IER, ier & UART_IER_UUE);
         }
@@ -110,40 +123,40 @@ rt_err_t serial8250_early_of_setup(struct serial8250 *serial, struct rt_of_early
     return ret;
 }
 
-static void common_init(struct serial8250 *serial, struct rt_of_earlycon_desc *desc)
+static void common_init(struct serial8250 *serial, struct rt_fdt_earlycon *con)
 {
-    serial->base = (void *)desc->mmio;
-    serial->size = desc->size;
+    serial->base = (void *)con->mmio;
+    serial->size = con->size;
     serial->iotype = PORT_MMIO32;
 }
 
-static rt_err_t common_early_setup(struct rt_of_earlycon_desc *desc, const char *options)
+static rt_err_t common_early_setup(struct rt_fdt_earlycon *con, const char *options)
 {
     struct serial8250 *serial = &early_serial8250;
 
-    common_init(serial, desc);
+    common_init(serial, con);
     serial->regshift = 2;
-    fdt_getprop_u32(desc->fdt, desc->node_offset, "reg-shift", &serial->regshift, RT_NULL);
+    fdt_getprop_u32(con->fdt, con->nodeoffset, "reg-shift", &serial->regshift, RT_NULL);
 
-    return serial8250_early_of_setup(serial, desc, options);
+    return serial8250_early_fdt_setup(serial, con, options);
 }
-RT_OF_EARLYCON_EXPORT(bcm2835aux, "uart8250", "brcm,bcm2835-aux-uart", common_early_setup);
-RT_OF_EARLYCON_EXPORT(tegra20, "uart8250", "nvidia,tegra20-uart", common_early_setup);
-RT_OF_EARLYCON_EXPORT(dw8250, "uart8250", "snps,dw-apb-uart", common_early_setup);
-RT_OF_EARLYCON_EXPORT(ns16550a, "uart8250", "ns16550a", common_early_setup);
-RT_OF_EARLYCON_EXPORT(ns16550, "uart8250", "ns16550", common_early_setup);
+RT_FDT_EARLYCON_EXPORT(bcm2835aux, "uart8250", "brcm,bcm2835-aux-uart", common_early_setup);
+RT_FDT_EARLYCON_EXPORT(tegra20, "uart8250", "nvidia,tegra20-uart", common_early_setup);
+RT_FDT_EARLYCON_EXPORT(dw8250, "uart8250", "snps,dw-apb-uart", common_early_setup);
+RT_FDT_EARLYCON_EXPORT(ns16550a, "uart8250", "ns16550a", common_early_setup);
+RT_FDT_EARLYCON_EXPORT(ns16550, "uart8250", "ns16550", common_early_setup);
 
 #ifdef RT_USING_8250_OMAP
-static rt_err_t omap8250_early_setup(struct rt_of_earlycon_desc *desc, const char *options)
+static rt_err_t omap8250_early_setup(struct rt_fdt_earlycon *con, const char *options)
 {
     struct serial8250 *serial = &early_serial8250;
 
-    common_init(serial, desc);
+    common_init(serial, con);
     serial->regshift = 2;
 
-    return serial8250_early_of_setup(serial, desc, options);
+    return serial8250_early_fdt_setup(serial, con, options);
 }
-OF_EARLYCON_DECLARE(omap8250, "uart8250", "ti,omap2-uart", omap8250_early_setup);
-OF_EARLYCON_DECLARE(omap8250, "uart8250", "ti,omap3-uart", omap8250_early_setup);
-OF_EARLYCON_DECLARE(omap8250, "uart8250", "ti,omap4-uart", omap8250_early_setup);
+RT_FDT_EARLYCON_EXPORT(omap8250, "uart8250", "ti,omap2-uart", omap8250_early_setup);
+RT_FDT_EARLYCON_EXPORT(omap8250, "uart8250", "ti,omap3-uart", omap8250_early_setup);
+RT_FDT_EARLYCON_EXPORT(omap8250, "uart8250", "ti,omap4-uart", omap8250_early_setup);
 #endif /* RT_USING_8250_OMAP */

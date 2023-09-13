@@ -1,6 +1,7 @@
 menuconfig RT_USING_PCI
     bool "Using Peripheral Component Interconnect Express (PCIe/PCI)"
     depends on RT_USING_DM
+    depends on RT_USING_PIC
     default n
 
 config RT_PCI_MSI
@@ -8,9 +9,28 @@ config RT_PCI_MSI
     depends on RT_USING_PCI
     default y
 
+config RT_PCI_SYS_64BIT
+    bool "System 64bit"
+    depends on RT_USING_PCI
+    depends on ARCH_CPU_64BIT
+    default y
+
+config RT_PCI_CACHE_LINE_SIZE
+    int "Cache line size"
+    depends on RT_USING_PCI
+    default 8 if ARCH_CPU_64BIT
+    default 4
+
+config RT_PCI_LOCKLESS
+    bool "Lock less in PCI options"
+    depends on RT_USING_PCI
+    default n
+
 config RT_PCI_ECAM
     bool "PCIe ECAM"
     depends on RT_USING_PCI
     default y
     help
         PCIe Express Enhanced Configuration Access Mechanism
+
+source "$RTT_DIR/components/drivers/pci/host/Kconfig"

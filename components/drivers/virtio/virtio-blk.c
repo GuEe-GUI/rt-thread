@@ -21,6 +21,7 @@
 #include <cpuport.h>
 
 #include "virtio-blk.h"
+#include "virtio_internal.h"
 
 #define VIRTIO_BLK_VQS_NR   1
 
@@ -39,7 +40,6 @@ struct virtio_blk_request
      */
 
     struct virtio_blk_req req;
-    rt_uint8_t status;
 
     /* user data */
     rt_bool_t done;
@@ -47,7 +47,7 @@ struct virtio_blk_request
 
 struct virtio_blk
 {
-    struct rt_device parent;
+    struct rt_blk_disk parent;
     struct rt_virtio_device *vdev;
 
     rt_le32_t blk_size;
@@ -61,10 +61,12 @@ struct virtio_blk
 
 #define raw_to_virtio_blk(raw) rt_container_of(raw, struct virtio_blk, parent)
 
-static void virtio_blk_rw(struct virtio_blk *vblk, rt_off_t pos, void *buffer, rt_size_t count, int flags)
+static rt_err_t virtio_blk_rw(struct virtio_blk *vblk,
+        rt_off_t sector, void *buffer, rt_size_t sector_count, int type)
 {
     rt_size_t size;
     rt_base_t level;
+    rt_uint8_t status = 0xff;
     struct rt_virtqueue *vq = RT_NULL;
     struct virtio_blk_request *request;
 
@@ -92,27 +94,26 @@ static void virtio_blk_rw(struct virtio_blk *vblk, rt_off_t pos, void *buffer, r
         rt_thread_yield();
     }
 
-    size = count * vblk->blk_size;
+    size = sector_count * vblk->blk_size;
 
     request = &vblk->request[vq->index * vblk->virtq_nr + rt_virtqueue_next_buf_index(vq)];
     request->done = RT_FALSE;
-    request->req.type = flags;
-    request->req.ioprio = 0;
-    request->req.sector = pos * (vblk->blk_size / 512);
-    request->status = 0xff;
+    request->req.type = cpu_to_virtio32(vblk->vdev, type);
+    request->req.ioprio = cpu_to_virtio32(vblk->vdev, 0);
+    request->req.sector = cpu_to_virtio64(vblk->vdev, sector * (vblk->blk_size / 512));
 
     rt_virtqueue_add_outbuf(vq, &request->req, sizeof(request->req));
 
-    if (flags == VIRTIO_BLK_T_OUT)
+    if (type == VIRTIO_BLK_T_OUT)
     {
         rt_virtqueue_add_outbuf(vq, buffer, size);
     }
-    else
+    else if (type == VIRTIO_BLK_T_IN)
     {
         rt_virtqueue_add_inbuf(vq, buffer, size);
     }
 
-    rt_virtqueue_add_inbuf(vq, &request->status, sizeof(request->status));
+    rt_virtqueue_add_inbuf(vq, &status, sizeof(status));
 
     rt_virtqueue_kick(vq);
 
@@ -122,67 +123,99 @@ static void virtio_blk_rw(struct virtio_blk *vblk, rt_off_t pos, void *buffer, r
     {
         rt_hw_cpu_relax();
     }
-}
 
-static rt_ssize_t virtio_blk_read(rt_device_t dev, rt_off_t pos, void *buffer, rt_size_t count)
-{
-    struct virtio_blk *vblk = raw_to_virtio_blk(dev);
-
-    virtio_blk_rw(vblk, pos, buffer, count, VIRTIO_BLK_T_IN);
-
-    return count;
-}
-
-static rt_ssize_t virtio_blk_write(rt_device_t dev, rt_off_t pos, const void *buffer, rt_size_t count)
-{
-    struct virtio_blk *vblk = raw_to_virtio_blk(dev);
-
-    virtio_blk_rw(vblk, pos, (void *)buffer, count, VIRTIO_BLK_T_OUT);
-
-    return count;
-}
-
-static rt_err_t virtio_blk_control(rt_device_t dev, int cmd, void *args)
-{
-    rt_err_t err = RT_EOK;
-    rt_le64_t capacity;
-    struct rt_device_blk_geometry *geometry;
-    struct virtio_blk *vblk = raw_to_virtio_blk(dev);
-
-    switch (cmd)
+    switch (status)
     {
-    case RT_DEVICE_CTRL_BLK_GETGEOME:
-        geometry = args;
+    case VIRTIO_BLK_S_OK:
+        return RT_EOK;
 
-        if (!geometry)
-        {
-            err = -RT_EINVAL;
-            break;
-        }
+    case VIRTIO_BLK_S_UNSUPP:
+        return -RT_ENOSYS;
 
-        rt_virtio_read_config(vblk->vdev, struct virtio_blk_config, capacity, &capacity);
+    case VIRTIO_BLK_S_ZONE_OPEN_RESOURCE:
+        return 1;
 
-        geometry->bytes_per_sector = 512;
-        geometry->block_size = vblk->blk_size;
-        geometry->sector_count = capacity;
-        break;
+    case VIRTIO_BLK_S_ZONE_ACTIVE_RESOURCE:
+        return 2;
 
+    case VIRTIO_BLK_S_IOERR:
+    case VIRTIO_BLK_S_ZONE_UNALIGNED_WP:
     default:
-        err = -RT_EINVAL;
-        break;
+        return -RT_EIO;
     }
-
-    return err;
 }
 
-#ifdef RT_USING_DEVICE_OPS
-const static struct rt_device_ops virtio_blk_ops =
+static rt_ssize_t virtio_blk_read(struct rt_blk_disk *disk, rt_off_t sector, void *buffer, rt_size_t sector_count)
+{
+    rt_ssize_t res;
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    res = virtio_blk_rw(vblk, sector, buffer, sector_count, VIRTIO_BLK_T_IN);
+
+    return res >= 0 ? sector_count : res;
+}
+
+static rt_ssize_t virtio_blk_write(struct rt_blk_disk *disk, rt_off_t sector, const void *buffer, rt_size_t sector_count)
+{
+    rt_ssize_t res;
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    res = virtio_blk_rw(vblk, sector, (void *)buffer, sector_count, VIRTIO_BLK_T_OUT);
+
+    return res >= 0 ? sector_count : res;
+}
+
+static rt_err_t virtio_blk_getgeome(struct rt_blk_disk *disk, struct rt_device_blk_geometry *geometry)
+{
+    rt_le64_t capacity;
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    rt_virtio_read_config(vblk->vdev, struct virtio_blk_config, capacity, &capacity);
+
+    geometry->bytes_per_sector = 512;
+    geometry->block_size = vblk->blk_size;
+    geometry->sector_count = rt_le64_to_cpu(capacity);
+
+    return RT_EOK;
+}
+
+static rt_err_t virtio_blk_sync(struct rt_blk_disk *disk)
+{
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    return virtio_blk_rw(vblk, 0, RT_NULL, 0, VIRTIO_BLK_T_FLUSH);
+}
+
+static rt_err_t virtio_blk_erase(struct rt_blk_disk *disk)
+{
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    return virtio_blk_rw(vblk, 0, RT_NULL, 0, VIRTIO_BLK_T_SECURE_ERASE);
+}
+
+static rt_err_t virtio_blk_autorefresh(struct rt_blk_disk *disk, rt_bool_t is_auto)
+{
+    rt_uint8_t writeback = !is_auto;
+    struct virtio_blk *vblk = raw_to_virtio_blk(disk);
+
+    /*
+     * 0: write through
+     * 1: write back
+     */
+    rt_virtio_write_config(vblk->vdev, struct virtio_blk_config, writeback, &writeback);
+
+    return RT_EOK;
+}
+
+static const struct rt_blk_disk_ops virtio_blk_ops =
 {
     .read = virtio_blk_read,
     .write = virtio_blk_write,
-    .control = virtio_blk_control,
+    .getgeome = virtio_blk_getgeome,
+    .sync = virtio_blk_sync,
+    .erase = virtio_blk_erase,
+    .autorefresh = virtio_blk_autorefresh,
 };
-#endif
 
 static void virtio_blk_done(struct rt_virtqueue *vq)
 {
@@ -192,12 +225,6 @@ static void virtio_blk_done(struct rt_virtqueue *vq)
     while ((request = rt_virtqueue_read_buf(vq, RT_NULL)))
     {
         request->done = RT_TRUE;
-
-        if (request->status != VIRTIO_BLK_S_OK)
-        {
-            LOG_E("request status = %d is fail", request->status);
-            RT_ASSERT(0);
-        }
     }
 
     rt_spin_unlock_irqrestore(&vq->vdev->vq_lock, level);
@@ -213,7 +240,7 @@ static rt_err_t virtio_blk_vq_init(struct virtio_blk *vblk)
     {
         vqs_nr = 1;
 
-        LOG_W("%s-%s not support %s", rt_dm_get_dev_name(&vblk->vdev->parent), "blk", "VIRTIO_BLK_F_MQ");
+        LOG_W("%s-%s not support %s", rt_dm_dev_get_name(&vblk->vdev->parent), "blk", "VIRTIO_BLK_F_MQ");
     }
 
     vblk->virtq_nr = rt_min(RT_CPUS_NR, 1024) * VIRTIO_BLK_REQUEST_SPLIT_NR;
@@ -252,6 +279,7 @@ static void virtio_blk_vq_finit(struct virtio_blk *vblk)
 static rt_err_t virtio_blk_probe(struct rt_virtio_device *vdev)
 {
     rt_err_t err;
+    static int index = 0;
     struct virtio_blk *vblk = rt_calloc(1, sizeof(*vblk));
 
     if (!vblk)
@@ -260,32 +288,25 @@ static rt_err_t virtio_blk_probe(struct rt_virtio_device *vdev)
     }
 
     vblk->vdev = vdev;
-
-    vblk->parent.type = RT_Device_Class_Block;
-#ifdef RT_USING_DEVICE_OPS
+    vblk->parent.parallel_io = RT_TRUE;
     vblk->parent.ops = &virtio_blk_ops;
-#else
-    vblk->parent.read = virtio_blk_read;
-    vblk->parent.write = virtio_blk_write;
-    vblk->parent.control = virtio_blk_control;
-#endif
+    vblk->parent.max_partitions = RT_BLK_PARTITION_MAX;
 
     if ((err = virtio_blk_vq_init(vblk)))
     {
         goto _fail;
     }
 
-    if ((err = rt_dm_set_dev_name_auto(&vblk->parent, "block")) < 0)
-    {
-        goto _fail;
-    }
-
-    if ((err = rt_device_register(&vblk->parent, rt_dm_get_dev_name(&vblk->parent), RT_DEVICE_FLAG_RDWR)))
-    {
-        goto _fail;
-    }
-
     rt_virtio_read_config(vblk->vdev, struct virtio_blk_config, blk_size, &vblk->blk_size);
+
+    rt_dm_dev_set_name(&vblk->parent.parent, "vd%c", 'a' + index);
+
+    if ((err = rt_hw_blk_disk_register(&vblk->parent)))
+    {
+        goto _fail;
+    }
+
+    ++index;
 
     return RT_EOK;
 
@@ -310,9 +331,11 @@ static struct rt_virtio_driver virtio_blk_driver =
       | RT_BIT(VIRTIO_BLK_F_GEOMETRY)
       | RT_BIT(VIRTIO_BLK_F_BLK_SIZE)
       | RT_BIT(VIRTIO_BLK_F_TOPOLOGY)
+      | RT_BIT(VIRTIO_BLK_F_CONFIG_WCE)
       | RT_BIT(VIRTIO_BLK_F_MQ)
       | RT_BIT(VIRTIO_BLK_F_DISCARD)
-      | RT_BIT(VIRTIO_BLK_F_WRITE_ZEROES),
+      | RT_BIT(VIRTIO_BLK_F_WRITE_ZEROES)
+      | RT_BIT(VIRTIO_BLK_F_SECURE_ERASE),
 
     .probe = virtio_blk_probe,
 };

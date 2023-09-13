@@ -1,0 +1,14 @@
+menuconfig RT_INPUT_TOUCHSCREEN
+    bool "Touchscreens"
+    select RT_USING_TOUCH
+    default n
+
+config RT_INPUT_TOUCHSCREEN_RASPBERRYPI_FW
+    bool "Raspberry Pi's firmware base touch screen support"
+    depends on RT_INPUT_TOUCHSCREEN
+    select RT_USING_OFW
+    select RT_USING_DMA
+    select RT_FIRMWARE_RASPBERRYPI
+    select RT_USING_ADT
+    select RT_USING_ADT_BITMAP
+    default n

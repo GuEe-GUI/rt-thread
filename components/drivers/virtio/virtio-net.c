@@ -164,7 +164,7 @@ static struct pbuf *virtio_net_rx(rt_device_t dev)
         if (size > sizeof(request->rx.mss))
         {
             LOG_W("%s receive buffer's size = %u > %u is overflow",
-                    rt_dm_get_dev_name(&vnet->parent.parent), size, sizeof(request->rx.mss));
+                    rt_dm_dev_get_name(&vnet->parent.parent), size, sizeof(request->rx.mss));
 
             size = sizeof(request->rx.mss);
         }
@@ -241,8 +241,11 @@ const static struct rt_device_ops virtio_net_ops =
 static void virtio_net_rx_done(struct rt_virtqueue *vq)
 {
     struct virtio_net *vnet = vq->vdev->priv;
+    rt_ubase_t level = rt_spin_lock_irqsave(&vnet->vdev->vq_lock);
 
     virtio_net_enqueue(vnet, vq);
+
+    rt_spin_unlock_irqrestore(&vnet->vdev->vq_lock, level);
 
     eth_device_ready(&vnet->parent);
 }
@@ -276,7 +279,7 @@ static void virtio_net_config_changed(struct rt_virtio_device *vdev)
 
     link_up = !!((vnet->status = status) & VIRTIO_NET_S_LINK_UP);
 
-    LOG_D("%s linkchange to %s", rt_dm_get_dev_name(&vdev->parent), link_up ? "up" : "down");
+    LOG_D("%s linkchange to %s", rt_dm_dev_get_name(&vdev->parent), link_up ? "up" : "down");
 
     eth_device_linkchange(&vnet->parent, link_up);
 }
@@ -379,12 +382,12 @@ static rt_err_t virtio_net_probe(struct rt_virtio_device *vdev)
         goto _fail;
     }
 
-    if ((err = rt_dm_set_dev_name_auto(&vnet->parent.parent, "e")) < 0)
+    if ((err = rt_dm_dev_set_name_auto(&vnet->parent.parent, "e")) < 0)
     {
         goto _fail;
     }
 
-    if ((err = eth_device_init(&vnet->parent, rt_dm_get_dev_name(&vnet->parent.parent))))
+    if ((err = eth_device_init(&vnet->parent, rt_dm_dev_get_name(&vnet->parent.parent))))
     {
         goto _fail;
     }
@@ -420,6 +423,7 @@ static struct rt_virtio_driver virtio_net_driver =
       | RT_BIT(VIRTIO_NET_F_GUEST_ANNOUNCE)
       | RT_BIT(VIRTIO_NET_F_MQ)
       | RT_BIT(VIRTIO_NET_F_CTRL_MAC_ADDR)
+      | RT_BIT(VIRTIO_NET_F_SPEED_DUPLEX)
       | RT_BIT(VIRTIO_F_ANY_LAYOUT)
       | RT_BIT(VIRTIO_F_RING_INDIRECT_DESC),
 

@@ -1,0 +1,9 @@
+config RT_PHY_ROCKCHIP_NANENG_COMBO
+    bool "Rockchip NANENG COMBO PHY Driver"
+    select RT_MFD_SYSCON
+    default n
+
+config RT_PHY_ROCKCHIP_SNPS_PCIE3
+    bool "Rockchip Snps PCIe3 PHY Driver"
+    select RT_MFD_SYSCON
+    default n

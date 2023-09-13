@@ -56,13 +56,33 @@ void backtrace(unsigned long pc, unsigned long lr, unsigned long fp)
     rt_kprintf("\n");
 }
 
+int rt_backtrace_skipn(int level)
+{
+    unsigned long lr;
+    unsigned long fp = (unsigned long)__builtin_frame_address(0U);
+
+    /* skip current frames */
+    struct bt_frame frame;
+    frame.fp = fp;
+
+    /* skip n frames */
+    do
+    {
+        if (unwind_frame(&frame))
+            return -RT_ERROR;
+        lr = frame.pc;
+
+        /* INFO: level is signed integer */
+    } while (level-- > 0);
+
+    backtrace(0, lr, frame.fp);
+    return 0;
+}
+
 int rt_backtrace(void)
 {
-    unsigned long pc = (unsigned long)backtrace;
-    unsigned long ra = (unsigned long)__builtin_return_address(0U);
-    unsigned long fr = (unsigned long)__builtin_frame_address(0U);
-
-    backtrace(pc, ra, fr);
+    /* skip rt_backtrace itself */
+    rt_backtrace_skipn(1);
     return 0;
 }
 MSH_CMD_EXPORT_ALIAS(rt_backtrace, bt_test, backtrace test);

@@ -1,0 +1,18 @@
+menuconfig RT_USING_ADC
+    bool "Using ADC device drivers"
+    default n
+
+config RT_ADC_ROCKCHIP_SARADC
+    bool "Rockchip SARADC driver"
+    depends on RT_USING_DM
+    depends on RT_USING_ADC
+    select RT_USING_RESET
+    select RT_USING_REGULATOR
+    default n
+
+config RT_ADC_RP1
+    bool "RP1 ADC and temperature sensor driver"
+    depends on RT_USING_DM
+    depends on RT_USING_ADC
+    select RT_USING_REGULATOR
+    default n

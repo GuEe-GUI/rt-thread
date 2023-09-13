@@ -1,0 +1,15 @@
+menuconfig RT_USING_MBOX
+    bool "Using Hardware Mailbox device drivers"
+    depends on RT_USING_DM
+    select RT_USING_OFW
+    default n
+
+config RT_MBOX_BCM2835
+    bool "BCM2835 Mailbox"
+    depends on RT_USING_MBOX
+    default n
+
+config RT_MBOX_ROCKCHIP
+    bool "Rockchip Soc Integrated Mailbox Support"
+    depends on RT_USING_MBOX
+    default n

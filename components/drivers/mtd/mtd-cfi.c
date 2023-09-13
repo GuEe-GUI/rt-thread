@@ -90,8 +90,7 @@ static const rt_uint32_t offset_multiply[9][5] =
     {0, 16, 8, 0, 8},   /* port width = 8 (64-bit) */
 };
 
-#if DBG_LVL >= DBG_INFO
-const char *const vendor_name[] =
+rt_used const char *const vendor_name[] =
 {
     [CFI_CMDSET_INTEL_EXTENDED] = "Intel/Sharp extended",
     [CFI_CMDSET_AMD_STANDARD]   = "AMD/Fujitsu standard",
@@ -100,7 +99,6 @@ const char *const vendor_name[] =
     [CFI_CMDSET_MITSU_STANDARD] = "Mitsubishi standard",
     [CFI_CMDSET_MITSU_EXTENDED] = "Mitsubishi extendend",
 };
-#endif
 
 static rt_uint8_t *cfi_flash_make_addr(struct cfi_flash_map *maps, rt_int32_t sect, rt_uint32_t offset)
 {
@@ -111,53 +109,28 @@ static rt_uint8_t *cfi_flash_make_addr(struct cfi_flash_map *maps, rt_int32_t se
 
 static rt_uint8_t cfi_flash_read_u8(struct cfi_flash_map *maps, rt_uint32_t offset)
 {
-    rt_uint8_t value;
-    rt_uint8_t *cp = cfi_flash_make_addr(maps, 0, offset);
+    void *addr = cfi_flash_make_addr(maps, 0, offset);
 
-#ifndef ARCH_CPU_BIG_ENDIAN
-    value = cp[0];
-#else
-    value = (cp[maps->portwidth - 1]);
-#endif
-
-    return value;
+    return HWREG8(addr);
 }
 
 static rt_uint16_t cfi_flash_read_u16(struct cfi_flash_map *maps, rt_int32_t sect, rt_uint32_t offset)
 {
-    rt_uint16_t value;
-    rt_uint8_t *addr = cfi_flash_make_addr(maps, sect, offset);
+    void *addr = cfi_flash_make_addr(maps, sect, offset);
 
-#ifndef ARCH_CPU_BIG_ENDIAN
-    value = (addr[(maps->portwidth)] << 8) | addr[0];
-#else
-    value = (rt_uint16_t)((addr[(2 * maps->portwidth) - 1] << 8) | addr[maps->portwidth - 1]);
-#endif
-
-    return value;
+    return rt_cpu_to_le16(HWREG16(addr));
 }
 
 static rt_uint32_t cfi_flash_read_u32(struct cfi_flash_map *maps, rt_int32_t sect, rt_uint32_t offset)
 {
-    rt_uint32_t value;
-    rt_uint8_t *addr = cfi_flash_make_addr(maps, sect, offset);
+    void *addr = cfi_flash_make_addr(maps, sect, offset);
 
-#ifndef ARCH_CPU_BIG_ENDIAN
-    value = (addr[0] << 16) |
-        (addr[(maps->portwidth)] << 24) |
-        (addr[(2 * maps->portwidth)]) | (addr[(3 * maps->portwidth)] << 8);
-#else
-    value = (rt_uint32_t)(addr[(2 * maps->portwidth) - 1] << 24) |
-        (addr[(maps->portwidth) - 1] << 16) |
-        (addr[(4 * maps->portwidth) - 1] << 8) | addr[(3 * maps->portwidth) - 1];
-#endif
-
-    return value;
+    return rt_cpu_to_le32(HWREG32(addr));
 }
 
 static void cfi_flash_make_cmd(struct cfi_flash_map *maps, rt_uint8_t cmd, void *cmdbuf)
 {
-    rt_uint8_t *cp = (rt_uint8_t *) cmdbuf;
+    rt_uint8_t *cp = (rt_uint8_t *)cmdbuf;
 
     if (maps->chipwidth < CFI_FLASH_BY32)
     {
@@ -261,7 +234,7 @@ static void cfi_flash_add_byte(struct cfi_flash_map *maps, union cfiword *cword,
     case CFI_FLASH_16BIT:
     #ifndef ARCH_CPU_BIG_ENDIAN
         {
-            unsigned short w = c;
+            rt_uint16_t w = c;
             w <<= 8;
             cword->w = (cword->w >> 8) | w;
         }
@@ -313,7 +286,7 @@ static rt_err_t cfi_flash_status_check(struct cfi_flash_map *maps, union cfiptr 
         data = *cptr.wp;
 
         /* test to see if bit6 is NOT toggling */
-        if ((data & 0xFFFF) == (lastdata & 0xFFFF))
+        if ((data & 0xffff) == (lastdata & 0xffff))
         {
             ready = 1;
         }
@@ -325,7 +298,7 @@ static rt_err_t cfi_flash_status_check(struct cfi_flash_map *maps, union cfiptr 
                 data = *cptr.wp;
 
                 /* test to see if bit6 is toggling */
-                if ((data & 0xFFFF) != (lastdata & 0xFFFF))
+                if ((data & 0xffff) != (lastdata & 0xffff))
                 {
                     err = -RT_ERROR;
                 }
@@ -334,7 +307,6 @@ static rt_err_t cfi_flash_status_check(struct cfi_flash_map *maps, union cfiptr 
 
         lastdata = data;
     }
-
 
     if (err || ready == 0)
     {
@@ -346,8 +318,8 @@ static rt_err_t cfi_flash_status_check(struct cfi_flash_map *maps, union cfiptr 
     return err;
 }
 
-static rt_int32_t cfi_flash_full_status_check(struct cfi_flash_map *maps,
-        union cfiptr cptr, union cfiword * cword, rt_uint32_t tout, char *prompt)
+static rt_err_t cfi_flash_full_status_check(struct cfi_flash_map *maps,
+        union cfiptr cptr, union cfiword *cword, rt_uint32_t tout, char *prompt)
 {
     rt_err_t err;
 
@@ -505,10 +477,16 @@ static rt_err_t cfi_flash_write_cfibuffer(struct cfi_flash_map *maps, rt_ubase_t
 
             default:
                 return -RT_EINVAL;
-                break;
             }
 
-            cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t) cnt - 1);
+            if (maps->portwidth == CFI_FLASH_8BIT)
+            {
+                cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t)cnt - 1);
+            }
+            else
+            {
+                HWREG8(cfi_flash_make_addr(maps, sector, 0)) = (rt_uint8_t)cnt - 1;
+            }
 
             while (cnt-- > 0)
             {
@@ -540,7 +518,7 @@ static rt_err_t cfi_flash_write_cfibuffer(struct cfi_flash_map *maps, rt_ubase_t
     case CFI_CMDSET_AMD_STANDARD:
     case CFI_CMDSET_AMD_EXTENDED:
         src.cp = cp;
-        dst.cp = (rt_uint8_t *) dest;
+        dst.cp = (rt_uint8_t *)dest;
         sector = cfi_find_sector(maps, dest);
 
         cfi_flash_unlock_seq(maps, 0);
@@ -550,7 +528,7 @@ static rt_err_t cfi_flash_write_cfibuffer(struct cfi_flash_map *maps, rt_ubase_t
         {
         case CFI_FLASH_8BIT:
             cnt = len;
-            cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t) cnt - 1);
+            cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t)cnt - 1);
             while (cnt-- > 0)
             {
                 *dst.cp++ = *src.cp++;
@@ -559,7 +537,7 @@ static rt_err_t cfi_flash_write_cfibuffer(struct cfi_flash_map *maps, rt_ubase_t
 
         case CFI_FLASH_16BIT:
             cnt = len >> 1;
-            cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t) cnt - 1);
+            cfi_flash_write_cmd(maps, sector, 0, (rt_uint8_t)cnt - 1);
             while (cnt-- > 0)
             {
                 *dst.wp++ = *src.wp++;
@@ -583,10 +561,24 @@ static rt_err_t cfi_flash_write_cfibuffer(struct cfi_flash_map *maps, rt_ubase_t
     }
 }
 
+static void cfi_flash_reset(struct cfi_flash_map *maps)
+{
+    /*
+     * We do not yet know what kind of commandset to use, so we issue
+     * the reset command in both Intel and AMD variants, in the hope
+     * that AMD flash roms ignore the Intel command.
+     */
+    cfi_flash_write_cmd(maps, 0, 0, CFI_AMD_CMD_RESET);
+    rt_hw_us_delay(1);
+    cfi_flash_write_cmd(maps, 0, 0, CFI_FLASH_CMD_RESET);
+}
+
 static rt_err_t cfi_flash_detect(struct cfi_flash *cfi, int map)
 {
     union cfiptr cptr1, cptr2, cptr3;
     struct cfi_flash_map *maps = &cfi->maps[map];
+
+    cfi_flash_reset(maps);
 
     for (maps->portwidth = CFI_FLASH_8BIT;
         maps->portwidth <= CFI_FLASH_16BIT;
@@ -631,7 +623,7 @@ static rt_ssize_t cfi_flash_read(struct rt_mtd_nor_device *dev, rt_off_t offset,
 
     cfi_flash_write_cmd(maps, offset / maps->block_size, offset % maps->block_size, maps->cmd_reset);
 
-    memcpy(data, ((const void *)(maps->base + offset)), length);
+    rt_memcpy(data, ((const void *)(maps->base + offset)), length);
 
     rt_mutex_release(&maps->rw_lock);
 
@@ -819,13 +811,14 @@ _out_lock:
 static rt_err_t cfi_flash_erase_block(struct rt_mtd_nor_device *dev, rt_off_t offset, rt_size_t length)
 {
     union cfiptr cptr;
-    union cfiword cword;
+    union cfiword cword = { .c = 0xff };
     rt_int32_t sect;
     rt_int32_t prot = 0;
+    rt_err_t err = RT_EOK;
     struct cfi_flash_map *maps = raw_to_cfi_flash_map(dev);
     rt_off_t sect_start = offset / maps->block_size, sect_end = (offset + length) / maps->block_size;
 
-    cword.c = 0xff;
+    rt_mutex_take(&maps->rw_lock, RT_WAITING_FOREVER);
 
     for (sect = sect_start; sect <= sect_end; ++sect)
     {
@@ -839,7 +832,8 @@ static rt_err_t cfi_flash_erase_block(struct rt_mtd_nor_device *dev, rt_off_t of
     {
         LOG_W("%d protected sectors will not be erased", prot);
 
-        return -RT_EIO;
+        err = -RT_EIO;
+        goto _out_lock;
     }
 
     if (sect_start == 0 && sect_end == (maps->sect_count - 1)
@@ -857,7 +851,8 @@ static rt_err_t cfi_flash_erase_block(struct rt_mtd_nor_device *dev, rt_off_t of
 
         if (cfi_flash_full_status_check(maps, cptr, &cword, maps->erase_chip_tout, "chip erase"))
         {
-            return -RT_ERROR;
+            err = -RT_ERROR;
+            goto _out_lock;
         }
     }
     else
@@ -893,13 +888,17 @@ static rt_err_t cfi_flash_erase_block(struct rt_mtd_nor_device *dev, rt_off_t of
 
                 if (cfi_flash_full_status_check(maps, cptr, &cword, maps->erase_blk_tout, "sector erase"))
                 {
-                    return -RT_ERROR;
+                    err = -RT_ERROR;
+                    goto _out_lock;
                 }
             }
         }
     }
 
-    return RT_EOK;
+_out_lock:
+    rt_mutex_release(&maps->rw_lock);
+
+    return err;
 }
 
 const static struct rt_mtd_nor_driver_ops cfi_flash_ops =
@@ -910,43 +909,11 @@ const static struct rt_mtd_nor_driver_ops cfi_flash_ops =
     .erase_block = cfi_flash_erase_block,
 };
 
-static rt_err_t cfi_flash_ofw_init(struct rt_platform_device *pdev, struct cfi_flash *cfi)
-{
-    rt_err_t err;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
-
-    cfi->maps_nr = rt_ofw_get_address_count(np);
-
-    if (cfi->maps_nr <= 0)
-    {
-        return -RT_EEMPTY;
-    }
-
-    if ((err = rt_ofw_prop_read_u32(np, "bank-width", &cfi->bank_width)))
-    {
-        return err;
-    }
-
-    if (!(cfi->maps = rt_calloc(1, sizeof(*cfi->maps) * cfi->maps_nr)))
-    {
-        return -RT_ENOMEM;
-    }
-
-    for (int i = 0; i < cfi->maps_nr; ++i)
-    {
-        if ((err = rt_ofw_get_address(np, i, &cfi->maps[i].address, &cfi->maps[i].size)))
-        {
-            break;
-        }
-    }
-
-    return err;
-}
-
 static rt_err_t cfi_flash_probe(struct rt_platform_device *pdev)
 {
     const char *name;
     rt_err_t err = RT_EOK;
+    struct rt_device *dev = &pdev->parent;
     struct cfi_flash *cfi = rt_calloc(1, sizeof(*cfi));
 
     if (!cfi)
@@ -954,8 +921,24 @@ static rt_err_t cfi_flash_probe(struct rt_platform_device *pdev)
         return -RT_ENOMEM;
     }
 
-    if ((err = cfi_flash_ofw_init(pdev, cfi)))
+    cfi->maps_nr = rt_dm_dev_get_address_count(dev);
+
+    if (cfi->maps_nr <= 0)
     {
+        err = -RT_EEMPTY;
+
+        goto _fail;
+    }
+
+    if ((err = rt_dm_dev_prop_read_u32(dev, "bank-width", &cfi->bank_width)))
+    {
+        goto _fail;
+    }
+
+    if (!(cfi->maps = rt_calloc(1, sizeof(*cfi->maps) * cfi->maps_nr)))
+    {
+        err = -RT_ENOMEM;
+
         goto _fail;
     }
 
@@ -963,11 +946,23 @@ static rt_err_t cfi_flash_probe(struct rt_platform_device *pdev)
     {
         struct cfi_flash_map *maps = &cfi->maps[i];
         rt_int32_t size_ratio, offset_etout, offset_wbtout, wtout;
-        rt_uint64_t address = maps->address, size = maps->size;
+        rt_uint64_t address, size;
         rt_size_t sect_count = 0;
         rt_ubase_t sector;
         /* map a page early first */
-        void *early_base = rt_ioremap((void *)address, RT_MM_PAGE_SIZE);
+        void *early_base;
+
+        if (rt_dm_dev_get_address(dev, i, &address, &size) < 0)
+        {
+            err = -RT_EIO;
+
+            goto _fail;
+        }
+
+        maps->address = address;
+        maps->size = size;
+
+        early_base = rt_ioremap((void *)address, RT_MM_PAGE_SIZE);
 
         if (!early_base)
         {
@@ -1109,12 +1104,12 @@ static rt_err_t cfi_flash_probe(struct rt_platform_device *pdev)
         maps->parent.block_end = maps->sect_count;
         maps->parent.block_size = maps->block_size;
 
-        if ((err = rt_dm_set_dev_name_auto(&maps->parent.parent, "nor")) < 0)
+        if ((err = rt_dm_dev_set_name_auto(&maps->parent.parent, "nor")) < 0)
         {
             goto _fail;
         }
 
-        name = rt_dm_get_dev_name(&maps->parent.parent);
+        name = rt_dm_dev_get_name(&maps->parent.parent);
 
         if ((err = rt_mutex_init(&maps->rw_lock, name, RT_IPC_FLAG_PRIO)))
         {
@@ -1126,6 +1121,8 @@ static rt_err_t cfi_flash_probe(struct rt_platform_device *pdev)
             goto _fail;
         }
     }
+
+    dev->user_data = cfi;
 
     return RT_EOK;
 
@@ -1154,6 +1151,37 @@ _fail:
     return err;
 }
 
+static rt_err_t cfi_flash_remove(struct rt_platform_device *pdev)
+{
+    struct cfi_flash *cfi = pdev->parent.user_data;
+
+    if (cfi->maps)
+    {
+        for (int i = 0; i < cfi->maps_nr; ++i)
+        {
+            struct cfi_flash_map *maps = &cfi->maps[i];
+
+            if (maps->base)
+            {
+                rt_iounmap(maps->base);
+            }
+
+            if (maps->sect)
+            {
+                rt_free(maps->sect);
+            }
+        }
+
+        rt_device_unregister(&cfi->maps->parent.parent);
+
+        rt_free(cfi->maps);
+    }
+
+    rt_free(cfi);
+
+    return RT_EOK;
+}
+
 static const struct rt_ofw_node_id cfi_flash_ofw_ids[] =
 {
     { .compatible = "cfi-flash" },
@@ -1166,5 +1194,6 @@ static struct rt_platform_driver cfi_flash_driver =
     .ids = cfi_flash_ofw_ids,
 
     .probe = cfi_flash_probe,
+    .remove = cfi_flash_remove,
 };
 RT_PLATFORM_DRIVER_EXPORT(cfi_flash_driver);

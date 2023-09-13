@@ -85,7 +85,22 @@ struct rt_mmcsd_host_ops
     rt_int32_t (*get_card_status)(struct rt_mmcsd_host *host);
     void (*enable_sdio_irq)(struct rt_mmcsd_host *host, rt_int32_t en);
     rt_int32_t (*execute_tuning)(struct rt_mmcsd_host *host, rt_int32_t opcode);
+    rt_bool_t (*card_busy)(struct rt_mmcsd_host *host);
+    rt_err_t (*signal_voltage_switch)(struct rt_mmcsd_host *host, struct rt_mmcsd_io_cfg *io_cfg);
 };
+
+#ifdef RT_USING_REGULATOR
+struct rt_regulator;
+
+struct rt_mmcsd_supply
+{
+    rt_bool_t vqmmc_enabled;
+    rt_bool_t regulator_enabled;
+
+    struct rt_regulator *vmmc;  /* Card power supply */
+    struct rt_regulator *vqmmc; /* Optional Vccq supply */
+};
+#endif /* RT_USING_REGULATOR */
 
 struct rt_mmcsd_host
 {
@@ -129,6 +144,7 @@ struct rt_mmcsd_host
 #define MMCSD_SUP_HS200_1V2  (1 << 10)
 #define MMCSD_SUP_HS200     (MMCSD_SUP_HS200_1V2 | MMCSD_SUP_HS200_1V8) /* hs200 sdr */
 #define MMCSD_SUP_NONREMOVABLE  (1 << 11)
+#define controller_is_removable(host) (!(host->flags & MMCSD_SUP_NONREMOVABLE))
 
     rt_uint32_t max_seg_size;   /* maximum size of one dma segment */
     rt_uint32_t max_dma_segs;   /* maximum number of dma segments in one request */
@@ -144,6 +160,10 @@ struct rt_mmcsd_host
     rt_uint32_t       sdio_irq_num;
     struct rt_semaphore    *sdio_irq_sem;
     struct rt_thread     *sdio_irq_thread;
+
+#ifdef RT_USING_REGULATOR
+    struct rt_mmcsd_supply supply;
+#endif
 
     void *private_data;
 };

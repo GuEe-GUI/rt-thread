@@ -15,6 +15,7 @@
 #include <drivers/ofw_io.h>
 #include <drivers/syscon.h>
 #include <drivers/platform.h>
+#include <drivers/core/rtdm.h>
 
 static struct rt_spinlock _syscon_nodes_lock = { 0 };
 static rt_list_t _syscon_nodes = RT_LIST_OBJECT_INIT(_syscon_nodes);
@@ -28,6 +29,8 @@ rt_err_t rt_syscon_read(struct rt_syscon *syscon, rt_off_t offset, rt_uint32_t *
         *out_val = HWREG32(syscon->iomem_base + offset);
 
         rt_spin_unlock_irqrestore(&syscon->rw_lock, level);
+
+        return RT_EOK;
     }
     else
     {
@@ -44,6 +47,8 @@ rt_err_t rt_syscon_write(struct rt_syscon *syscon, rt_off_t offset, rt_uint32_t 
         HWREG32(syscon->iomem_base + offset) = val;
 
         rt_spin_unlock_irqrestore(&syscon->rw_lock, level);
+
+        return RT_EOK;
     }
     else
     {
@@ -76,10 +81,20 @@ rt_err_t rt_syscon_update_bits(struct rt_syscon *syscon, rt_off_t offset, rt_uin
     return err;
 }
 
+static rt_err_t syscon_probe(struct rt_platform_device *pdev);
+
 struct rt_syscon *rt_syscon_find_by_ofw_node(struct rt_ofw_node *np)
 {
-    struct rt_syscon *syscon;
-    rt_ubase_t level = rt_spin_lock_irqsave(&_syscon_nodes_lock);
+    rt_ubase_t level;
+    struct rt_syscon *syscon = RT_NULL;
+    struct rt_platform_device syscon_pdev;
+
+    if (!np)
+    {
+        goto _exit;
+    }
+
+    level = rt_spin_lock_irqsave(&_syscon_nodes_lock);
 
     /* ofw_data is not safety */
     rt_list_for_each_entry(syscon, &_syscon_nodes, list)
@@ -92,10 +107,30 @@ struct rt_syscon *rt_syscon_find_by_ofw_node(struct rt_ofw_node *np)
 
     rt_spin_unlock_irqrestore(&_syscon_nodes_lock, level);
 
+    if (syscon)
+    {
+        goto _exit;
+    }
+
+    /* Not found, try probe this node */
+    if (!rt_ofw_node_is_compatible(np, "syscon") &&
+        !rt_ofw_node_is_compatible(np, "simple-mfd"))
+    {
+        goto _exit;
+    }
+
+    syscon_pdev.parent.ofw_node = np;
+
+    if (!syscon_probe(&syscon_pdev))
+    {
+        syscon = rt_ofw_data(np);
+    }
+
+_exit:
     return syscon;
 }
 
-struct rt_syscon *rt_syscon_find_by_compatible(const char *compatible)
+struct rt_syscon *rt_syscon_find_by_ofw_compatible(const char *compatible)
 {
     struct rt_syscon *syscon;
     struct rt_ofw_node *syscon_np = rt_ofw_find_node_by_compatible(RT_NULL, compatible);
@@ -110,7 +145,7 @@ struct rt_syscon *rt_syscon_find_by_compatible(const char *compatible)
     return syscon;
 }
 
-struct rt_syscon *rt_syscon_find_by_phandle(struct rt_ofw_node *np, const char *propname)
+struct rt_syscon *rt_syscon_find_by_ofw_phandle(struct rt_ofw_node *np, const char *propname)
 {
     struct rt_syscon *syscon;
     struct rt_ofw_node *syscon_np = rt_ofw_parse_phandle(np, propname, 0);
@@ -130,7 +165,7 @@ static rt_err_t syscon_probe(struct rt_platform_device *pdev)
     rt_err_t err;
     struct rt_ofw_node *np;
     rt_uint64_t iomem_range[2];
-    struct syscon *syscon = rt_malloc(sizeof(*syscon));
+    struct rt_syscon *syscon = rt_calloc(1, sizeof(*syscon));
 
     if (!syscon)
     {
@@ -152,7 +187,12 @@ static rt_err_t syscon_probe(struct rt_platform_device *pdev)
         goto _fail;
     }
 
+    rt_list_init(&syscon->list);
+    rt_list_insert_after(&_syscon_nodes, &syscon->list);
+
     rt_spin_lock_init(&syscon->rw_lock);
+
+    pdev->parent.user_data = syscon;
 
     syscon->np = pdev->parent.ofw_node;
     rt_ofw_data(np) = syscon;
@@ -163,6 +203,17 @@ _fail:
     rt_free(syscon);
 
     return err;
+}
+
+static rt_err_t syscon_remove(struct rt_platform_device *pdev)
+{
+    struct rt_syscon *syscon = pdev->parent.user_data;
+
+    rt_iounmap(syscon->iomem_base);
+
+    rt_free(syscon);
+
+    return RT_EOK;
 }
 
 static const struct rt_ofw_node_id syscon_ofw_ids[] =
@@ -177,6 +228,7 @@ static struct rt_platform_driver syscon_driver =
     .ids = syscon_ofw_ids,
 
     .probe = syscon_probe,
+    .remove = syscon_remove,
 };
 
 static int syscon_drv_register(void)
@@ -185,4 +237,4 @@ static int syscon_drv_register(void)
 
     return 0;
 }
-INIT_SUBSYS_EXPORT(syscon_drv_register);
+INIT_FRAMEWORK_EXPORT(syscon_drv_register);

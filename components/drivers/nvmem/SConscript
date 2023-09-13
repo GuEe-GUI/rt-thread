@@ -1,0 +1,18 @@
+from building import *
+
+group = []
+
+if not GetDepend(['RT_USING_NVMEM']):
+    Return('group')
+
+cwd = GetCurrentDir()
+CPPPATH = [cwd + '/../include']
+
+src = ['nvmem.c']
+
+if GetDepend(['RT_NVMEM_ROCKCHIP_OTP']):
+    src += ['nvmem-rockchip-otp.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
+Return('group')

@@ -151,6 +151,7 @@ static const char *const virtio_device_id_name[] =
     [VIRTIO_DEVICE_ID_RNG]              = "rng",
     [VIRTIO_DEVICE_ID_GPU]              = "gpu",
     [VIRTIO_DEVICE_ID_INPUT]            = "input",
+    [VIRTIO_DEVICE_ID_AUDIO]            = "sound",
 
     [VIRTIO_DEVICE_ID_MAX]              = RT_NULL,
 };
@@ -183,9 +184,22 @@ static struct rt_bus virtio_bus;
 
 rt_err_t rt_virtio_driver_register(struct rt_virtio_driver *vdrv)
 {
+    const struct rt_virtio_device_id *id;
+
     RT_ASSERT(vdrv != RT_NULL);
 
+    id = vdrv->ids;
+    while ((id + 1)->device)
+    {
+        ++id;
+    }
+
     vdrv->parent.bus = &virtio_bus;
+#if RT_NAME_MAX > 0
+    rt_strcpy(vdrv->parent.parent.name, virtio_device_id_name[id->device]);
+#else
+    vdrv->parent.parent.name = virtio_device_id_name[id->device];
+#endif
 
     return rt_driver_register(&vdrv->parent);
 }
@@ -197,9 +211,9 @@ rt_err_t rt_virtio_device_register(struct rt_virtio_device *vdev)
     RT_ASSERT(vdev != RT_NULL);
     RT_ASSERT(vdev->trans != RT_NULL);
 
-    vdev->idx = (int)rt_hw_atomic_add(&uid, 1);
+    vdev->idx = (int)rt_atomic_add(&uid, 1);
 
-    rt_dm_set_dev_name(&vdev->parent, "virtio%u", vdev->idx);
+    rt_dm_dev_set_name(&vdev->parent, "virtio%u", vdev->idx);
 
     rt_list_init(&vdev->vq_node);
 
@@ -273,7 +287,7 @@ static rt_err_t virtio_probe(rt_device_t dev)
 
         if (!(status & VIRTIO_STATUS_FEATURES_OK))
         {
-            LOG_E("%s device refuses features: %x", rt_dm_get_dev_name(dev), status);
+            LOG_E("%s device refuses features: %x", rt_dm_dev_get_name(dev), status);
 
             err = -RT_EIO;
             goto _err;

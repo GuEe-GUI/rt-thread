@@ -1,0 +1,7 @@
+menuconfig RT_USING_PHY
+    bool "Using Port Physical Layer (PHY) device drivers"
+    default n
+
+if RT_USING_DM && RT_USING_PHY
+source "$RTT_DIR/components/drivers/phy/rockchip/Kconfig"
+endif

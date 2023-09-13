@@ -1,0 +1,44 @@
+menuconfig RT_USING_REGULATOR
+    bool "Using Voltage and Current Regulator"
+    depends on RT_USING_DM
+    default n
+
+config RT_REGULATOR_FAN53555
+    bool "Fairchild FAN53555 Regulator"
+    depends on RT_USING_REGULATOR
+    depends on RT_USING_I2C
+    default n
+
+config RT_REGULATOR_FIXED
+    bool "Fixed regulator support"
+    depends on RT_USING_REGULATOR
+    select RT_USING_PIN
+    default y
+
+config RT_REGULATOR_GPIO
+    bool "GPIO regulator support"
+    depends on RT_USING_REGULATOR
+    select RT_USING_PIN
+    default y
+
+config RT_REGULATOR_PWM
+    bool "PWM regulator support"
+    depends on RT_USING_REGULATOR
+    select RT_USING_PWM
+    select RT_USING_PIN
+    select RT_USING_OFW
+    default n
+
+config RT_REGULATOR_RK8XX
+    bool "Rockchip RK805/RK808/RK809/RK817/RK818 Power regulators"
+    depends on RT_USING_REGULATOR
+    depends on RT_MFD_RK8XX
+    select RT_USING_PIN
+    default y
+
+config RT_REGULATOR_SCMI
+    bool "SCMI regulator support"
+    depends on RT_USING_REGULATOR
+    select RT_USING_OFW
+    select RT_FIRMWARE_ARM_SCMI
+    default n

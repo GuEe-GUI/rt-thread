@@ -10,10 +10,35 @@
  * 2023-06-04     GuEe-GUI     support cpu init by device-tree
  */
 
+#ifndef __ASSEMBLY__
 #define __ASSEMBLY__
+#endif
 
 #include <mmu.h>
 #include <rtconfig.h>
+
+#define ARM64_IMAGE_FLAG_BE_SHIFT           0
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT    (ARM64_IMAGE_FLAG_BE_SHIFT + 1)
+#define ARM64_IMAGE_FLAG_PHYS_BASE_SHIFT    (ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT + 2)
+
+#define ARM64_IMAGE_FLAG_LE                 0
+#define ARM64_IMAGE_FLAG_BE                 1
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_4K       1
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_16K      2
+#define ARM64_IMAGE_FLAG_PAGE_SIZE_64K      3
+#define ARM64_IMAGE_FLAG_PHYS_BASE          1
+
+#define _HEAD_FLAG(field)                   (_HEAD_FLAG_##field << ARM64_IMAGE_FLAG_##field##_SHIFT)
+
+#ifdef ARCH_CPU_BIG_ENDIAN
+#define _HEAD_FLAG_BE                       ARM64_IMAGE_FLAG_BE
+#else
+#define _HEAD_FLAG_BE                       ARM64_IMAGE_FLAG_LE
+#endif
+#define _HEAD_FLAG_PAGE_SIZE                ((ARCH_PAGE_SHIFT - 10) / 2)
+#define _HEAD_FLAG_PHYS_BASE                1
+
+#define _HEAD_FLAGS                         (_HEAD_FLAG(BE) | _HEAD_FLAG(PAGE_SIZE) | _HEAD_FLAG(PHYS_BASE))
 
 .macro get_phy, reg, symbol
     adrp    \reg, \symbol
@@ -31,14 +56,14 @@
 /*
  * Our goal is to boot the rt-thread as possible without modifying the
  * bootloader's config, so we use the kernel's boot header for ARM64:
- *   https://www.kernel.org/doc/html/latest/arm64/booting.html#call-the-kernel-image
+ *   https://www.kernel.org/doc/html/latest/arch/arm64/booting.html#call-the-kernel-image
  */
 _head:
     b       _start          /* Executable code */
     .long   0               /* Executable code */
     .quad   _text_offset    /* Image load offset from start of RAM, little endian */
     .quad   _end - _head    /* Effective Image size, little endian (_end defined in link.lds) */
-    .quad   0xa             /* Kernel flags, little endian */
+    .quad   _HEAD_FLAGS     /* Kernel flags, little endian */
     .quad   0               /* Reserved */
     .quad   0               /* Reserved */
     .quad   0               /* Reserved */
@@ -84,13 +109,9 @@ _start:
     b       init_mmu_early
 
 kernel_start:
-    /* Set sp to current cpu's stack top to visual address */
-    get_pvoff x1 x0
-    mov     x1, stack_top
-    add     x1, x1, x0
-    mov     sp, x1
-
     /* jump to the PE's system entry */
+    mov     x29, xzr
+    mov     x30, x8
     br      x8
 
 cpu_idle:
@@ -260,6 +281,15 @@ enable_mmu_early:
 
     bl      mmu_tcr_init
 
+    /*
+     * OK, now, we don't use sp before jump to kernel, set sp to current cpu's
+     * stack top to visual address
+     */
+    get_pvoff x1 x0
+    mov     x1, stack_top
+    sub     x1, x1, x0
+    mov     sp, x1
+
     ldr     x30, =kernel_start      /* Set LR to kernel_start function, it's virtual addresses */
 
     mrs     x1, sctlr_el1
@@ -288,8 +318,8 @@ enable_mmu_early:
 .cpus_stack:
 #if defined(RT_USING_SMP) && RT_CPUS_NR > 1
     .space (ARCH_SECONDARY_CPU_STACK_SIZE * (RT_CPUS_NR - 1))
-.secondary_cpu_stack_top:
 #endif
+.secondary_cpu_stack_top:
     .space ARCH_SECONDARY_CPU_STACK_SIZE
 .boot_cpu_stack_top:
 

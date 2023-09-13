@@ -18,7 +18,7 @@ else:
     src += ['serial.c']
 
 if GetDepend(['RT_USING_DM']):
-    src += ['serial_internal.c']
+    src += ['serial_dm.c']
 
 if GetDepend(['RT_SERIAL_PL011']):
     src += ['serial-pl011.c']

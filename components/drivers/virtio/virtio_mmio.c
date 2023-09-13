@@ -16,10 +16,9 @@
 
 #include <mmu.h>
 
+#include <drivers/ofw.h>
 #include <drivers/pic.h>
 #include <drivers/virtio.h>
-#include <drivers/ofw_io.h>
-#include <drivers/ofw_irq.h>
 #include <drivers/platform.h>
 
 #define VIRTIO_MMIO_MAGIC               0x000 /* <RO> Magic value */
@@ -66,7 +65,6 @@
 struct virtio_mmio
 {
     struct rt_virtio_device parent;
-    struct rt_platform_device *pdev;
 
     void *base;
     int irq;
@@ -217,7 +215,7 @@ static rt_err_t virtio_mmio_set_features(struct rt_virtio_device *vdev)
     if (vio->version == 2 && !(vdev->features & RT_BIT(VIRTIO_F_VERSION_1)))
     {
         LOG_E("%s (virtio-mmio) devices (version 2) must provide VIRTIO_F_VERSION_1 feature",
-                rt_dm_get_dev_name(&vdev->parent));
+                rt_dm_dev_get_name(&vdev->parent));
 
         return -RT_EINVAL;
     }
@@ -323,7 +321,7 @@ static struct rt_virtqueue *virtio_mmio_install_vq(struct rt_virtio_device *vdev
 
     if (num_max == 0)
     {
-        LOG_E("%s.virtqueue[%s] num_max is zero", rt_dm_get_dev_name(&vdev->parent), name);
+        LOG_E("%s.virtqueue[%s] num_max is zero", rt_dm_dev_get_name(&vdev->parent), name);
 
         return RT_NULL;
     }
@@ -331,7 +329,7 @@ static struct rt_virtqueue *virtio_mmio_install_vq(struct rt_virtio_device *vdev
     if (virtq_nr && virtq_nr > num_max)
     {
         LOG_E("%s.virtqueue[%s] queue_num(%d) > num_max(%d)",
-                rt_dm_get_dev_name(&vdev->parent), name, virtq_nr, num_max);
+                rt_dm_dev_get_name(&vdev->parent), name, virtq_nr, num_max);
 
         return RT_NULL;
     }
@@ -438,7 +436,7 @@ static rt_err_t virtio_mmio_release_vqs(struct rt_virtio_device *vdev)
                 if (!status)
                 {
                     LOG_W("%s.virtqueue[%s] VIRTIO_MMIO_QUEUE_READY = %d",
-                            rt_dm_get_dev_name(&vq->vdev->parent), vq->name, status);
+                            rt_dm_dev_get_name(&vq->vdev->parent), vq->name, status);
                 }
             }
 
@@ -523,117 +521,98 @@ static const struct rt_virtio_transport virtio_mmio_trans =
     .reset = virtio_mmio_reset,
 };
 
-static rt_err_t virtio_mmio_ofw_init(struct rt_platform_device *pdev, struct virtio_mmio *vio)
-{
-    rt_err_t err = RT_EOK;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
-
-    vio->base = rt_ofw_iomap(np, 0);
-
-    if (vio->base)
-    {
-        vio->irq = rt_ofw_get_irq(np, 0);
-
-        if (vio->irq >= 0)
-        {
-            vio->pdev = pdev;
-            rt_ofw_data(np) = &vio->parent.parent;
-        }
-        else
-        {
-            err = -RT_ERROR;
-        }
-    }
-    else
-    {
-        err = -RT_EIO;
-    }
-
-    return err;
-}
-
 static rt_err_t virtio_mmio_probe(struct rt_platform_device *pdev)
 {
     rt_err_t err = RT_EOK;
+    rt_uint32_t magic;
     struct rt_virtio_device *vdev;
+    struct rt_device *dev = &pdev->parent;
     struct virtio_mmio *vio = rt_calloc(1, sizeof(*vio));
 
-    do {
-        rt_uint32_t magic;
-
-        if (!vio)
-        {
-            err = -RT_ENOMEM;
-            break;
-        }
-
-        err = virtio_mmio_ofw_init(pdev, vio);
-
-        if (err)
-        {
-            break;
-        }
-
-        magic = virtio_mmio_read32(vio, VIRTIO_MMIO_MAGIC);
-
-        /* 0x74726976 (a Little Endian equivalent of the "virt" string). */
-        if (magic != ('v' | 'i' << 8 | 'r' << 16 | 't' << 24))
-        {
-            err = -RT_EINVAL;
-
-            LOG_E("invalid magic: %x", magic);
-
-            break;
-        }
-
-        vio->version = virtio_mmio_read32(vio, VIRTIO_MMIO_VERSION);
-
-        /* Only support version 1~2 */
-        if (vio->version < 1 || vio->version > 2)
-        {
-            err = -RT_ENOSYS;
-
-            LOG_E("not support version: %d", vio->version);
-
-            break;
-        }
-
-        vdev = &vio->parent;
-
-        vdev->id.device = virtio_mmio_read32(vio, VIRTIO_MMIO_DEVICE_ID);
-
-        if (vdev->id.device == VIRTIO_DEVICE_ID_INVALID)
-        {
-            err = -RT_EEMPTY;
-            break;
-        }
-
-        vdev->id.vendor = virtio_mmio_read32(vio, VIRTIO_MMIO_VENDOR_ID);
-
-        if (vio->version == 1)
-        {
-            virtio_mmio_write32(vio, VIRTIO_MMIO_GUEST_PAGE_SIZE, VIRTIO_MMIO_VIRTQ_PAGE_SZIE);
-        }
-
-        rt_spin_lock_init(&vio->spinlock);
-
-        vdev->trans = &virtio_mmio_trans;
-
-        err = rt_virtio_device_register(vdev);
-
-        if (!err)
-        {
-            char name[RT_NAME_MAX];
-
-            rt_sprintf(name, "%s-%s", rt_dm_get_dev_name(&vdev->parent), rt_virtio_device_id_name(vdev));
-            rt_hw_interrupt_install(vio->irq, virtio_mmio_isr, vio, name);
-        }
-    } while (0);
-
-    if (err)
+    if (!vio)
     {
-        rt_free(vio);
+        return -RT_ENOMEM;
     }
+
+    vio->base = rt_dm_dev_iomap(dev, 0);
+
+    if (!vio->base)
+    {
+        err = -RT_EIO;
+
+        goto _fail;
+    }
+
+    vio->irq = rt_dm_dev_get_irq(dev, 0);
+
+    if (vio->irq < 0)
+    {
+        err = vio->irq;
+
+        goto _fail;
+    }
+
+    magic = virtio_mmio_read32(vio, VIRTIO_MMIO_MAGIC);
+
+    /* 0x74726976 (a Little Endian equivalent of the "virt" string). */
+    if (magic != ('v' | 'i' << 8 | 'r' << 16 | 't' << 24))
+    {
+        err = -RT_EINVAL;
+
+        LOG_E("invalid magic: %x", magic);
+
+        goto _fail;
+    }
+
+    vio->version = virtio_mmio_read32(vio, VIRTIO_MMIO_VERSION);
+
+    /* Only support version 1~2 */
+    if (vio->version < 1 || vio->version > 2)
+    {
+        err = -RT_ENOSYS;
+
+        LOG_E("not support version: %d", vio->version);
+
+        goto _fail;
+    }
+
+    vdev = &vio->parent;
+
+    vdev->id.device = virtio_mmio_read32(vio, VIRTIO_MMIO_DEVICE_ID);
+
+    if (vdev->id.device == VIRTIO_DEVICE_ID_INVALID)
+    {
+        err = -RT_EEMPTY;
+        goto _fail;
+    }
+
+    vdev->id.vendor = virtio_mmio_read32(vio, VIRTIO_MMIO_VENDOR_ID);
+
+    if (vio->version == 1)
+    {
+        virtio_mmio_write32(vio, VIRTIO_MMIO_GUEST_PAGE_SIZE, VIRTIO_MMIO_VIRTQ_PAGE_SZIE);
+    }
+
+    rt_spin_lock_init(&vio->spinlock);
+
+    vdev->trans = &virtio_mmio_trans;
+
+    if (!(err = rt_virtio_device_register(vdev)))
+    {
+        char name[RT_NAME_MAX];
+
+        rt_sprintf(name, "%s-%s", rt_dm_dev_get_name(&vdev->parent), rt_virtio_device_id_name(vdev));
+        rt_hw_interrupt_install(vio->irq, virtio_mmio_isr, vio, name);
+    }
+
+    return RT_EOK;
+
+_fail:
+    if (vio->base)
+    {
+        rt_iounmap(vio->base);
+    }
+    rt_free(vio);
 
     return err;
 }

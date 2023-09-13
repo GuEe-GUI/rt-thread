@@ -41,6 +41,9 @@ struct rt_pwm_configuration
     rt_bool_t  complementary;
 };
 
+#define rt_pwm_conf_duty_cycle(conf)        ((conf)->pulse * 100 / (conf)->period)
+#define rt_pwm_conf_pulse(conf, duty_cycle) ((duty_cycle) * (conf)->period / 100)
+
 struct rt_device_pwm;
 struct rt_pwm_ops
 {
@@ -62,5 +65,6 @@ rt_err_t rt_pwm_set_period(struct rt_device_pwm *device, int channel, rt_uint32_
 rt_err_t rt_pwm_set_pulse(struct rt_device_pwm *device, int channel, rt_uint32_t pulse);
 rt_err_t rt_pwm_set_dead_time(struct rt_device_pwm *device, int channel, rt_uint32_t dead_time);
 rt_err_t rt_pwm_set_phase(struct rt_device_pwm *device, int channel, rt_uint32_t phase);
+rt_err_t rt_pwm_get(struct rt_device_pwm *device, struct rt_pwm_configuration *cfg);
 
 #endif /* __DRV_PWM_H_INCLUDE__ */

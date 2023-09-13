@@ -94,9 +94,9 @@ eth_phy_monitor_handle_t phy_monitor_handle =
     .phy_handle     = s_gphys
 };
 
-static struct rt_phy_ops phy_ops;
+static const struct rt_phy_ops phy_ops;
 
-static rt_phy_status phy_init(void *object, rt_uint32_t phy_addr, rt_uint32_t src_clock_hz)
+static rt_phy_status phy_init(rt_phy_t *phy, void *object, rt_uint32_t phy_addr, rt_uint32_t src_clock_hz)
 {
     return PHY_STATUS_OK;
 }

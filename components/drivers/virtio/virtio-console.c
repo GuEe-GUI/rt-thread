@@ -180,16 +180,16 @@ static rt_err_t virtio_console_probe(struct rt_virtio_device *vdev)
 
     rt_list_init(&vconsole->port_nodes);
 
-    if ((err = rt_dm_set_dev_name_auto(&vport->parent, "vport")) < 0)
+    if ((err = rt_dm_dev_set_name_auto(&vport->parent, "vport")) < 0)
     {
         goto _fail;
     }
 
-    vconsole->uid = rt_dm_get_dev_name_id(&vport->parent);
+    vconsole->uid = rt_dm_dev_get_name_id(&vport->parent);
 
-    rt_dm_set_dev_name(&vport->parent, "%s%dp%d", "vport", vconsole->uid, 0);
+    rt_dm_dev_set_name(&vport->parent, "%s%dp%d", "vport", vconsole->uid, 0);
 
-    if ((err = rt_device_register(&vport->parent, rt_dm_get_dev_name(&vport->parent),
+    if ((err = rt_device_register(&vport->parent, rt_dm_dev_get_name(&vport->parent),
             RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_REMOVABLE)))
     {
         goto _fail;

@@ -19,11 +19,11 @@
 #include <cpu.h>
 #include <smccc.h>
 
-#include <drivers/pm.h>
 #include <drivers/ofw.h>
 #include <drivers/psci.h>
 #include <drivers/platform.h>
 #include <drivers/core/rtdm.h>
+#include <drivers/core/power.h>
 
 struct psci_ops
 {
@@ -319,14 +319,14 @@ static rt_err_t psci_0_2_init(struct rt_ofw_node *np)
         _psci_ops.get_affinity_info = psci_affinity_info;
         _psci_ops.migrate_info_type = psci_migrate_info_type;
 
-        if (!rt_pm_shutdown)
+        if (!rt_dm_machine_shutdown)
         {
-            rt_pm_shutdown = psci_system_off;
+            rt_dm_machine_shutdown = psci_system_off;
         }
 
-        if (!rt_pm_reset)
+        if (!rt_dm_machine_reset)
         {
-            rt_pm_reset = psci_system_reboot;
+            rt_dm_machine_reset = psci_system_reboot;
         }
     }
     else
@@ -427,4 +427,4 @@ static int psci_drv_register(void)
 
     return 0;
 }
-INIT_SUBSYS_EXPORT(psci_drv_register);
+INIT_FRAMEWORK_EXPORT(psci_drv_register);

@@ -30,7 +30,7 @@ rt_err_t rt_syscon_write(struct rt_syscon *syscon, rt_off_t offset, rt_uint32_t 
 rt_err_t rt_syscon_update_bits(struct rt_syscon *syscon, rt_off_t offset, rt_uint32_t mask, rt_uint32_t val);
 
 struct rt_syscon *rt_syscon_find_by_ofw_node(struct rt_ofw_node *np);
-struct rt_syscon *rt_syscon_find_by_compatible(const char *compatible);
-struct rt_syscon *rt_syscon_find_by_phandle(struct rt_ofw_node *np, const char *propname);
+struct rt_syscon *rt_syscon_find_by_ofw_compatible(const char *compatible);
+struct rt_syscon *rt_syscon_find_by_ofw_phandle(struct rt_ofw_node *np, const char *propname);
 
 #endif /* __SYSCON_H__ */

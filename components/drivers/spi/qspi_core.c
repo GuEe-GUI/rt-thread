@@ -19,10 +19,7 @@ rt_err_t rt_qspi_configure(struct rt_qspi_device *device, struct rt_qspi_configu
     rt_err_t result = RT_EOK;
 
     /* copy configuration items */
-    qspi_device->config.parent.mode = cfg->parent.mode;
-    qspi_device->config.parent.max_hz = cfg->parent.max_hz;
-    qspi_device->config.parent.data_width = cfg->parent.data_width;
-    qspi_device->config.parent.reserved = cfg->parent.reserved;
+    rt_memcpy(&qspi_device->config.parent, &cfg->parent, sizeof(cfg->parent));
     qspi_device->config.medium_size = cfg->medium_size;
     qspi_device->config.ddr_mode = cfg->ddr_mode;
     qspi_device->config.qspi_dl_width = cfg->qspi_dl_width;

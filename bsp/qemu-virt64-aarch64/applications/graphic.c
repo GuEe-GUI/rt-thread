@@ -1,14 +1,15 @@
-// /*
-//  * Copyright (c) 2006-2021, RT-Thread Development Team
-//  *
-//  * SPDX-License-Identifier: Apache-2.0
-//  *
-//  * Change Logs:
-//  * Date           Author       Notes
-//  * 2021-11-11     GuEe-GUI     the first version
-//  */
+/*
+ * Copyright (c) 2006-2021, RT-Thread Development Team
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Change Logs:
+ * Date           Author       Notes
+ * 2021-11-11     GuEe-GUI     the first version
+ */
 
-// #include <rtthread.h>
+#include <rtthread.h>
+#include <rtdevice.h>
 
 // #include <virtio_gpu.h>
 // #include <virtio_input.h>

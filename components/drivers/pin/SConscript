@@ -10,8 +10,20 @@ CPPPATH = [cwd + '/../include']
 
 src = ['pin.c']
 
+if GetDepend(['RT_USING_DM']):
+    src += ['pin_dm.c']
+
+if GetDepend(['RT_USING_OFW']):
+    src += ['pin_ofw.c']
+
 if GetDepend(['RT_PIN_PL061']):
     src += ['pin-pl061.c']
+
+if GetDepend(['RT_PIN_RASPBERRYPI_EXP']):
+    src += ['pin-raspberrypi-exp.c']
+
+if GetDepend(['RT_PIN_ROCKCHIP']):
+    src += ['pin-rockchip.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 

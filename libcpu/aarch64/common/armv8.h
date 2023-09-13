@@ -1,57 +1,62 @@
 /*
- * Copyright (c) 2006-2020, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
  * 2011-09-15     Bernard      first version
+ * 2023-07-13     GuEe-GUI     append fpu: Q16 ~ Q31
  */
 
 #ifndef __ARMV8_H__
 #define __ARMV8_H__
 
+#include <rtdef.h>
+
+typedef struct { rt_uint64_t value[2]; } rt_uint128_t;
+
 /* the exception stack without VFP registers */
 struct rt_hw_exp_stack
 {
-    unsigned long pc;
-    unsigned long cpsr;
-    unsigned long sp_el0;
-    unsigned long x30;
-    unsigned long fpcr;
-    unsigned long fpsr;
-    unsigned long x28;
-    unsigned long x29;
-    unsigned long x26;
-    unsigned long x27;
-    unsigned long x24;
-    unsigned long x25;
-    unsigned long x22;
-    unsigned long x23;
-    unsigned long x20;
-    unsigned long x21;
-    unsigned long x18;
-    unsigned long x19;
-    unsigned long x16;
-    unsigned long x17;
-    unsigned long x14;
-    unsigned long x15;
-    unsigned long x12;
-    unsigned long x13;
-    unsigned long x10;
-    unsigned long x11;
-    unsigned long x8;
-    unsigned long x9;
-    unsigned long x6;
-    unsigned long x7;
-    unsigned long x4;
-    unsigned long x5;
-    unsigned long x2;
-    unsigned long x3;
-    unsigned long x0;
-    unsigned long x1;
+    rt_uint64_t pc;
+    rt_uint64_t cpsr;
+    rt_uint64_t sp_el0;
+    rt_uint64_t x30;
+    rt_uint64_t fpcr;
+    rt_uint64_t fpsr;
+    rt_uint64_t x28;
+    rt_uint64_t x29;
+    rt_uint64_t x26;
+    rt_uint64_t x27;
+    rt_uint64_t x24;
+    rt_uint64_t x25;
+    rt_uint64_t x22;
+    rt_uint64_t x23;
+    rt_uint64_t x20;
+    rt_uint64_t x21;
+    rt_uint64_t x18;
+    rt_uint64_t x19;
+    rt_uint64_t x16;
+    rt_uint64_t x17;
+    rt_uint64_t x14;
+    rt_uint64_t x15;
+    rt_uint64_t x12;
+    rt_uint64_t x13;
+    rt_uint64_t x10;
+    rt_uint64_t x11;
+    rt_uint64_t x8;
+    rt_uint64_t x9;
+    rt_uint64_t x6;
+    rt_uint64_t x7;
+    rt_uint64_t x4;
+    rt_uint64_t x5;
+    rt_uint64_t x2;
+    rt_uint64_t x3;
+    rt_uint64_t x0;
+    rt_uint64_t x1;
 
-    unsigned long long fpu[16];
+    rt_uint128_t fpu[32];
 };
 
 #define SP_ELx     ((unsigned long)0x01)

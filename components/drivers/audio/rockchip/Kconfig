@@ -1,0 +1,29 @@
+menuconfig RT_AUDIO_ROCKCHIP
+    bool "Enable Rockchip Audio"
+    select RT_USING_OFW
+    default n
+
+config RT_AUDIO_ROCKCHIP_I2S
+    bool "Rockchip I2S Device Driver"
+    depends on RT_AUDIO_ROCKCHIP
+    default n
+
+config RT_AUDIO_ROCKCHIP_I2S_TDM
+    bool "Rockchip I2S/TDM Device Driver"
+    depends on RT_AUDIO_ROCKCHIP
+    default n
+
+config RT_AUDIO_ROCKCHIP_HEADSET
+    bool "Rockchips HeadSet support"
+    depends on RT_AUDIO_ROCKCHIP
+    default n
+
+config RT_AUDIO_ROCKCHIP_PDM
+    bool "Rockchip PDM Controller Driver"
+    depends on RT_AUDIO_ROCKCHIP
+    default n
+
+config RT_AUDIO_ROCKCHIP_SPDIF
+    bool "Rockchip SPDIF Controller Driver"
+    depends on RT_AUDIO_ROCKCHIP
+    default n

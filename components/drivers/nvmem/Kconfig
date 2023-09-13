@@ -1,0 +1,10 @@
+menuconfig RT_USING_NVMEM
+    bool "Using Non Volatile Memory (NVMEM) device drivers"
+    depends on RT_USING_DM
+    select RT_USING_OFW
+    default n
+
+config RT_NVMEM_ROCKCHIP_OTP
+    bool "Rockchip OTP controller support"
+    depends on RT_USING_NVMEM
+    default n

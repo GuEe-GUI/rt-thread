@@ -1,0 +1,29 @@
+menuconfig RT_USING_AUDIO
+    select RT_USING_MEMPOOL
+    bool "Using Audio device drivers"
+    default n
+
+    if RT_USING_AUDIO
+        config RT_AUDIO_REPLAY_MP_BLOCK_SIZE
+            int "Replay memory pool block size"
+            default 4096
+
+        config RT_AUDIO_REPLAY_MP_BLOCK_COUNT
+            int "Replay memory pool block count"
+            default 2
+
+        config RT_AUDIO_RECORD_PIPE_SIZE
+            int "Record pipe size"
+            default 2048
+    endif
+
+config RT_AUDIO_INTEL_HDA
+    bool "Enable Intel High Definition Audio"
+    depends on RT_USING_DM
+    depends on RT_USING_AUDIO
+    select RT_USING_PCI
+    default n
+
+if RT_USING_DM && RT_USING_AUDIO
+source "$RTT_DIR/components/drivers/audio/rockchip/Kconfig"
+endif

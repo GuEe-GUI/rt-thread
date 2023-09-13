@@ -1,0 +1,15 @@
+from building import *
+
+Import('rtconfig')
+
+cwd     = GetCurrentDir()
+src     = []
+CPPPATH = [cwd]
+group   = []
+
+if GetDepend(['RT_USING_CRASH_CORE']):
+	src = Glob('*.c')
+	Env['LINKFLAGS'] += " -Wl,--build-id=sha1 "
+
+group = DefineGroup('LIBADT', src, depend = ['RT_USING_CRASH_CORE'], CPPPATH = CPPPATH)
+Return('group')

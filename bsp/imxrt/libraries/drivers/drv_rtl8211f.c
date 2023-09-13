@@ -185,7 +185,7 @@ static status_t PHY_RTL8211F_MMD_Write(uint8_t device, uint16_t addr, uint32_t d
     return result;
 }
 
-static rt_phy_status rt_phy_init(void *object, rt_uint32_t phy_addr, rt_uint32_t src_clock_hz)
+static rt_phy_status rt_phy_init(struct rt_phy_device *phy, void *object, rt_uint32_t phy_addr, rt_uint32_t src_clock_hz)
 {
     rt_bool_t ret;
     rt_phy_status result;
@@ -309,7 +309,7 @@ static rt_phy_status rt_phy_init(void *object, rt_uint32_t phy_addr, rt_uint32_t
     return result;
 }
 
-static rt_phy_status rt_phy_read(rt_uint32_t reg, rt_uint32_t *data)
+static rt_phy_status rt_phy_read(struct rt_phy_device *phy, rt_uint32_t reg, rt_uint32_t *data)
 {
     rt_mdio_t *mdio_bus = phy_rtl8211f.bus;
     rt_uint32_t device_id = phy_rtl8211f.addr;
@@ -321,7 +321,7 @@ static rt_phy_status rt_phy_read(rt_uint32_t reg, rt_uint32_t *data)
     return PHY_STATUS_FAIL;
 }
 
-static rt_phy_status rt_phy_write(rt_uint32_t reg, rt_uint32_t data)
+static rt_phy_status rt_phy_write(struct rt_phy_device *phy, rt_uint32_t reg, rt_uint32_t data)
 {
     rt_mdio_t *mdio_bus = phy_rtl8211f.bus;
     rt_uint32_t device_id = phy_rtl8211f.addr;
@@ -333,7 +333,7 @@ static rt_phy_status rt_phy_write(rt_uint32_t reg, rt_uint32_t data)
     return PHY_STATUS_FAIL;
 }
 
-static rt_phy_status rt_phy_loopback(rt_uint32_t mode, rt_uint32_t speed, rt_bool_t enable)
+static rt_phy_status rt_phy_loopback(struct rt_phy_device *phy, rt_uint32_t mode, rt_uint32_t speed, rt_bool_t enable)
 {
     /* This PHY only supports local loopback. */
     //    rt_assert(mode == PHY_LOCAL_LOOP);
@@ -371,7 +371,7 @@ static rt_phy_status rt_phy_loopback(rt_uint32_t mode, rt_uint32_t speed, rt_boo
     return result;
 }
 
-static rt_phy_status get_link_status(rt_bool_t *status)
+static rt_phy_status get_link_status(struct rt_phy_device *phy, rt_bool_t *status)
 {
     // assert(status);
 
@@ -396,7 +396,7 @@ static rt_phy_status get_link_status(rt_bool_t *status)
     return result;
 }
 
-static rt_phy_status get_link_speed_duplex(rt_uint32_t *speed, rt_uint32_t *duplex)
+static rt_phy_status get_link_speed_duplex(struct rt_phy_device *phy, rt_uint32_t *speed, rt_uint32_t *duplex)
 {
     // assert(!((speed == NULL) && (duplex == NULL)));
 
@@ -441,7 +441,7 @@ static rt_phy_status get_link_speed_duplex(rt_uint32_t *speed, rt_uint32_t *dupl
     return result;
 }
 
-static struct rt_phy_ops phy_ops =
+static const struct rt_phy_ops phy_ops =
     {
         .init = rt_phy_init,
         .read = rt_phy_read,

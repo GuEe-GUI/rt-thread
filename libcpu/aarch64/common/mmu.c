@@ -489,9 +489,13 @@ int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
 void mmu_tcr_init(void)
 {
     unsigned long val64;
+    unsigned long pa_range;
 
     val64 = 0x00447fUL;
     __asm__ volatile("msr MAIR_EL1, %0\n dsb sy\n" ::"r"(val64));
+
+    __asm__ volatile ("mrs %0, ID_AA64MMFR0_EL1":"=r"(val64));
+    pa_range = val64 & 0xf; /* PARange */
 
     /* TCR_EL1 */
     val64 = (16UL << 0)      /* t0sz 48bit */
@@ -508,7 +512,7 @@ void mmu_tcr_init(void)
             | (0x3UL << 26)  /* t1 outer wb cacheable */
             | (0x2UL << 28)  /* t1 outer shareable */
             | (0x2UL << 30)  /* t1 4k */
-            | (0x1UL << 32)  /* 001b 64GB PA */
+            | (pa_range << 32)  /* PA range */
             | (0x0UL << 35)  /* reserved */
             | (0x1UL << 36)  /* as: 0:8bit 1:16bit */
             | (0x0UL << 37)  /* tbi0 */
@@ -584,26 +588,34 @@ static int _map_single_page_2M(unsigned long *lv0_tbl, unsigned long va,
 
 void *rt_ioremap_early(void *paddr, size_t size)
 {
-    static void *ttbr0 = RT_NULL;
+    size_t count;
+    rt_ubase_t base;
+    static void *tbl = RT_NULL;
 
     if (!size)
     {
         return RT_NULL;
     }
 
-    if (!ttbr0)
+    if (!tbl)
     {
-        __asm__ volatile ("mrs %0, ttbr0_el1":"=r"(ttbr0));
+        tbl = rt_hw_mmu_tbl_get();
     }
 
-    _map_single_page_2M(ttbr0, (unsigned long)paddr, (unsigned long)paddr, MMU_MAP_K_DEVICE);
+    count = (size + ARCH_SECTION_MASK) >> ARCH_SECTION_SHIFT;
+    base = (rt_ubase_t)paddr & (~ARCH_SECTION_MASK);
+
+    while (count --> 0)
+    {
+        if (_map_single_page_2M(tbl, base, base, MMU_MAP_K_DEVICE))
+        {
+            return RT_NULL;
+        }
+
+        base += ARCH_SECTION_SIZE;
+    }
 
     return paddr;
-}
-
-void rt_iounmap_early(void *vaddr, size_t size)
-{
-
 }
 
 static int _init_map_2M(unsigned long *lv0_tbl, unsigned long va,

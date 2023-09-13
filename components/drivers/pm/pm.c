@@ -53,9 +53,6 @@
 #endif
 #endif
 
-void (*rt_pm_shutdown)(void) = RT_NULL;
-void (*rt_pm_reset)(void) = RT_NULL;
-
 static struct rt_pm _pm;
 
 /* default mode : system power on */

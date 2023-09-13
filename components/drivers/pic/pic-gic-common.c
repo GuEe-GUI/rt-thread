@@ -11,7 +11,7 @@
 #include <rthw.h>
 #include <rtthread.h>
 
-#define DBG_TAG "pic.gic-common"
+#define DBG_TAG "pic.gic*"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
@@ -24,7 +24,7 @@ void gic_common_init_quirk_ofw(const struct rt_ofw_node *ic_np, const struct gic
 {
     for (; quirks->desc; ++quirks)
     {
-        if (!rt_ofw_node_is_compatible(ic_np, quirks->compatible))
+        if (!quirks->compatible || !rt_ofw_node_is_compatible(ic_np, quirks->compatible))
         {
             continue;
         }
@@ -47,7 +47,7 @@ void gic_common_init_quirk_hw(rt_uint32_t iidr, const struct gic_quirk *quirks, 
             continue;
         }
 
-        if (quirks->iidr & (iidr & quirks->iidr_mask))
+        if (quirks->iidr == (iidr & quirks->iidr_mask))
         {
             RT_ASSERT(quirks->init != RT_NULL);
 

@@ -517,15 +517,19 @@ struct rt_spinlock;
 
 void rt_spin_lock_init(struct rt_spinlock *lock);
 void rt_spin_lock(struct rt_spinlock *lock);
+rt_err_t rt_spin_trylock(struct rt_spinlock *lock);
 void rt_spin_unlock(struct rt_spinlock *lock);
 rt_base_t rt_spin_lock_irqsave(struct rt_spinlock *lock);
+rt_err_t rt_spin_trylock_irqsave(struct rt_spinlock *lock, rt_ubase_t *out_level);
 void rt_spin_unlock_irqrestore(struct rt_spinlock *lock, rt_base_t level);
 
 #else
 #define rt_spin_lock_init(lock)                 /* nothing */
 #define rt_spin_lock(lock)                      rt_enter_critical()
+#define rt_spin_trylock(lock)                   ({ rt_spin_lock(lock), RT_EOK })
 #define rt_spin_unlock(lock)                    (RT_UNUSED(lock), rt_exit_critical())
 #define rt_spin_lock_irqsave(lock)              (RT_UNUSED(lock), rt_hw_interrupt_disable())
+#define rt_spin_trylock_irqsave(lock, out_level)({ RT_UNUSED(lock), *out_level = rt_hw_interrupt_disable(); RT_EOK })
 #define rt_spin_unlock_irqrestore(lock, level)  rt_hw_interrupt_enable(level)
 
 #endif

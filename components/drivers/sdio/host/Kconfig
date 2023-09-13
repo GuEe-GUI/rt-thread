@@ -1,0 +1,25 @@
+config RT_SDIO_SDHCI_DWCMSHC
+    bool "Synopsys DWC MSHC SDHCI"
+    select RT_USING_OFW
+    default n
+
+config RT_SDIO_DW_MMC
+    bool "Synopsys DesignWare MMC Family"
+    select RT_USING_PINCTRL
+    select RT_USING_RESET
+    select RT_USING_REGULATOR
+    select RT_USING_DEVICE_IPC
+    select RT_USING_SYSTEM_WORKQUEUE
+    default n
+
+config RT_SDIO_DW_MMC_PCI
+    bool "Synopsys Designware MCI support on PCI bus"
+    depends on RT_SDIO_DW_MMC
+    select RT_USING_PCI
+    default n
+
+config RT_SDIO_DW_MMC_ROCKCHIP
+    bool "Rockchip"
+    depends on RT_SDIO_DW_MMC
+    select RT_USING_OFW
+    default n

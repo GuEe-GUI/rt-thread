@@ -151,7 +151,7 @@ static rt_err_t bcm2835_arm_intc_irq_parse(struct rt_pic *pic,
     return err;
 }
 
-static struct rt_pic_ops bcm2835_arm_intc_ops =
+const static struct rt_pic_ops bcm2835_arm_intc_ops =
 {
     .name = "BCM2835-ARMCTRL-level",
     .irq_mask = bcm2835_arm_intc_mask_irq,
@@ -239,4 +239,4 @@ static const struct rt_ofw_node_id bcm2835_arm_intc_ofw_ids[] =
     { .compatible = "brcm,bcm2836-armctrl-ic", },
     { /* sentinel */ }
 };
-RT_OF_DECLARE_CORE(bcm2835_arm_intc, bcm2835_arm_intc_ofw_ids, bcm2835_arm_ofw_intc);
+RT_PIC_OFW_DECLARE(bcm2835_arm_intc, bcm2835_arm_intc_ofw_ids, bcm2835_arm_ofw_intc);

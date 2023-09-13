@@ -1,0 +1,12 @@
+menuconfig RT_VIDEO_FB
+    bool "LCD and Frame buffer support"
+    depends on RT_USING_VIDEO
+    select RT_USING_LCD
+    default y
+
+config RT_VIDEO_FB_SIMPLE
+    bool "Simple framebuffer support"
+    depends on RT_VIDEO_FB
+    select RT_USING_OFW
+    default y
+

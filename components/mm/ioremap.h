@@ -31,7 +31,6 @@ extern "C" {
  */
 
 void *rt_ioremap_early(void *paddr, size_t size);
-void rt_iounmap_early(void *vaddr, size_t size);
 void *rt_ioremap(void *paddr, size_t size);
 void *rt_ioremap_nocache(void *paddr, size_t size);
 void *rt_ioremap_cached(void *paddr, size_t size);

@@ -326,12 +326,12 @@ static rt_err_t virtio_input_probe(struct rt_virtio_device *vdev)
         goto _fail;
     }
 
-    if ((err = rt_dm_set_dev_name_auto(&vinput->parent, "input-event")) < 0)
+    if ((err = rt_dm_dev_set_name_auto(&vinput->parent, "input-event")) < 0)
     {
         goto _fail;
     }
 
-    dev_name = rt_dm_get_dev_name(&vinput->parent);
+    dev_name = rt_dm_dev_get_name(&vinput->parent);
 
     if ((err = rt_device_register(&vinput->parent, dev_name, RT_DEVICE_FLAG_STANDALONE | RT_DEVICE_FLAG_INT_RX)))
     {

@@ -15,8 +15,12 @@
 
 struct rt_driver
 {
-    struct rt_bus *bus;
+    struct rt_object parent;
+
     rt_list_t node;
+    struct rt_bus *bus;
+
+    rt_uint32_t ref_count;
 
 #ifdef RT_USING_DEVICE_OPS
     const struct rt_device_ops *dev_ops;
@@ -29,15 +33,11 @@ struct rt_driver
     rt_ssize_t (*write) (rt_device_t dev, rt_off_t pos, const void *buffer, rt_size_t size);
     rt_err_t  (*control)(rt_device_t dev, int cmd, void *args);
 #endif
-
     const struct filesystem_ops *fops;
-
-    const char *name;
 
     int (*probe)(struct rt_device *dev);
     int (*remove)(struct rt_device *dev);
-
-    void *priv;
+    int (*shutdown)(struct rt_device *dev);
 };
 
 int rt_driver_probe_device(struct rt_driver *drv, struct rt_device *dev);

@@ -31,13 +31,14 @@ struct rt_device_notify
 struct rt_device
 {
     struct rt_object          parent;                   /**< inherit from rt_object */
+
     rt_list_t node;
     struct rt_bus *bus;
-    void   *priv;
 
 #ifdef RT_USING_DM
     rt_driver_t drv;
     void *ofw_node;
+    void *power_domain_unit;
 #endif
     enum rt_device_class_type type;                     /**< device type */
     rt_uint16_t               flag;                     /**< device flag */

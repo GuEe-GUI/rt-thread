@@ -1,0 +1,21 @@
+from building import *
+
+group = []
+
+if not GetDepend(['RT_USING_ADC']):
+    Return('group')
+
+cwd = GetCurrentDir()
+CPPPATH = [cwd + '/../include']
+
+src = ['adc.c']
+
+if GetDepend(['RT_ADC_ROCKCHIP_SARADC']):
+    src += ['adc-rockchip_saradc.c']
+
+if GetDepend(['RT_ADC_RP1']):
+    src += ['adc-rp1.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
+Return('group')

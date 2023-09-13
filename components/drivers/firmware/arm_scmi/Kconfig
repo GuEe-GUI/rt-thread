@@ -1,0 +1,11 @@
+menuconfig RT_FIRMWARE_ARM_SCMI
+    bool "ARM System Control and Management Interface Protocol (SCMI)"
+    depends on RT_USING_FIRMWARE
+    depends on ARCH_ARM_CORTEX_A || ARCH_ARMV8
+    select RT_USING_OFW
+    default n
+
+config RT_FIRMWARE_ARM_SCMI_TRANSPORT_SMC
+    bool "SCMI transport based on SMC"
+    depends on RT_FIRMWARE_ARM_SCMI
+    default y

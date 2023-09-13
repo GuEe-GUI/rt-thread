@@ -67,7 +67,7 @@ static rt_err_t ofw_parse_irq_map(struct rt_ofw_node *np, struct rt_ofw_cell_arg
      *  child interrupt specifier
      *      The interrupt specifier of the child node being mapped. The number
      *      of 32-bit cells required to specify this component is described by
-     *      the #interrupt-cells property of this node—the nexus node containing
+     *      the #interrupt-cells property of this node-the nexus node containing
      *      the interrupt-map property.
      *
      *  interrupt-parent
@@ -130,7 +130,7 @@ static rt_err_t ofw_parse_irq_map(struct rt_ofw_node *np, struct rt_ofw_cell_arg
      *              <0x1800 0 0   4 &gic    0 0 GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>; // INTD
      *      };
      *
-     * In fact, basically no SoC will be use multi ic to implemented INTx.
+     * In fact, almost no SoC will be use multi IC to implement INTx.
      * before call ofw_parse_irq_map(np, &args):
      *
      *      args.data = addr;
@@ -195,6 +195,9 @@ static rt_err_t ofw_parse_irq_map(struct rt_ofw_node *np, struct rt_ofw_cell_arg
 
             break;
         }
+
+        map_len /= sizeof(fdt32_t);
+        map_mask_len /= sizeof(fdt32_t);
 
         err = -RT_EINVAL;
 
@@ -491,7 +494,7 @@ rt_err_t rt_ofw_parse_irq_cells(struct rt_ofw_node *np, int index, struct rt_ofw
 
 struct rt_ofw_node *rt_ofw_find_irq_parent(struct rt_ofw_node *np, int *out_interrupt_cells)
 {
-    rt_ofw_foreach_parent_node(np)
+    for (np = rt_ofw_node_get(np); np; np = rt_ofw_get_next_parent(np))
     {
         rt_phandle ic_phandle;
 
@@ -523,7 +526,7 @@ static int ofw_map_irq(struct rt_ofw_cell_args *irq_args)
 {
     int irq;
     struct rt_ofw_node *ic_np = irq_args->data;
-    struct rt_pic *pic = rt_ofw_data(ic_np);
+    struct rt_pic *pic = rt_pic_dynamic_cast(rt_ofw_data(ic_np));
 
     /* args.data is "interrupt-controller" */
     if (pic)
@@ -611,7 +614,26 @@ int rt_ofw_get_irq(struct rt_ofw_node *np, int index)
 
         if (irq >= 0)
         {
+            rt_phandle cpu_phandle;
+
             irq = ofw_map_irq(&irq_args);
+
+            if (irq >= 0 && !rt_ofw_prop_read_u32_index(np, "interrupt-affinity", index, &cpu_phandle))
+            {
+                rt_uint64_t cpuid = rt_ofw_get_cpu_id(rt_ofw_find_node_by_phandle(cpu_phandle));
+
+                if ((rt_int64_t)cpuid >= 0)
+                {
+                    DECLARE_BITMAP(affinity, RT_CPUS_NR) = { 0 };
+
+                    bitmap_set_bit(affinity, cpuid);
+
+                    if (rt_pic_irq_set_affinity(irq, affinity) == -RT_ENOSYS)
+                    {
+                        LOG_W("%s irq affinity init fail", np->full_name);
+                    }
+                }
+            }
         }
     }
     else

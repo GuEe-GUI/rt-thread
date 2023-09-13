@@ -22,9 +22,8 @@ config SOC_RK3568
     bool
     select ARCH_ARMV8
     select ARCH_CPU_64BIT
+    select ARCH_ARM_MMU
     select RT_USING_CACHE
     select RT_USING_COMPONENTS_INIT
     select RT_USING_USER_MAIN
     default y
-
-source "$BSP_DIR/driver/Kconfig"

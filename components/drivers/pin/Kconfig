@@ -1,9 +1,23 @@
 menuconfig RT_USING_PIN
-    bool "Using generic GPIO device drivers"
+    bool "Using Generic GPIO device drivers"
     default y
 
 config RT_PIN_PL061
     bool "ARM PL061"
     depends on RT_USING_DM
     depends on RT_USING_PIN
+    default n
+
+config RT_PIN_RASPBERRYPI_EXP
+    bool "Raspberry Pi 3 GPIO Expander"
+    depends on RT_USING_DM
+    depends on RT_USING_PIN
+    select RT_FIRMWARE_RASPBERRYPI
+    default n
+
+config RT_PIN_ROCKCHIP
+    bool "Rockchip GPIO support"
+    depends on RT_USING_DM
+    depends on RT_USING_PIN
+    select RT_USING_OFW
     default n

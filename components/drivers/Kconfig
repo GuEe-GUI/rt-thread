@@ -35,19 +35,6 @@ if RT_USING_TTY
         default n
 endif
 
-config RT_USING_CAN
-    bool "Using CAN device drivers"
-    default n
-
-if RT_USING_CAN
-    config RT_CAN_USING_HDR
-        bool "Enable CAN hardware filter"
-        default n
-    config RT_CAN_USING_CANFD
-        bool "Enable CANFD support"
-        default n
-endif
-
 config RT_USING_CPUTIME
     bool "Enable CPU time for high resolution clock counter"
     default n
@@ -83,34 +70,6 @@ if RT_USING_CPUTIME
         default 0
 endif
 
-config RT_USING_I2C
-    bool "Using I2C device drivers"
-    default n
-
-if RT_USING_I2C
-    config RT_I2C_DEBUG
-        bool "Use I2C debug message"
-        default n
-
-    config RT_USING_I2C_BITOPS
-        bool "Use GPIO to simulate I2C"
-        default y
-
-    if RT_USING_I2C_BITOPS
-        config RT_I2C_BITOPS_DEBUG
-            bool "Use simulate I2C debug message"
-            default n
-    endif
-endif
-
-config RT_USING_PHY
-    bool "Using ethernet phy device drivers"
-    default n
-
-config RT_USING_ADC
-    bool "Using ADC device drivers"
-    default n
-
 config RT_USING_DAC
     bool "Using DAC device drivers"
     default n
@@ -127,127 +86,44 @@ config RT_USING_RANDOM
     bool "Using RANDOM device drivers"
     default n
 
-config RT_USING_PWM
-    bool "Using PWM device drivers"
+config RT_USING_PM
+    bool "Using Power Management device drivers"
     default n
 
-config RT_USING_SDIO
-    bool "Using SD/MMC device drivers"
-    default n
-
-    if RT_USING_SDIO
-        config RT_SDIO_STACK_SIZE
-            int "The stack size for sdio irq thread"
-            default 512
-
-        config RT_SDIO_THREAD_PRIORITY
-            int "The priority level value of sdio irq thread"
-            default 15
-
-        config RT_MMCSD_STACK_SIZE
-            int "The stack size for mmcsd thread"
-            default 1024
-
-        config RT_MMCSD_THREAD_PREORITY
-            int "The priority level value of mmcsd thread"
-            default 22
-
-        config RT_MMCSD_MAX_PARTITION
-            int "mmcsd max partition"
-            default 16
-        config RT_SDIO_DEBUG
-            bool "Enable SDIO debug log output"
-        default n
-    endif
-
-config RT_USING_SPI
-    bool "Using SPI Bus/Device device drivers"
-    default n
-
-    if RT_USING_SPI
-        config RT_USING_SPI_BITOPS
-            select RT_USING_PIN
-            bool "Use GPIO to simulate SPI"
-            default n
-
-        if RT_USING_SPI_BITOPS
-            config RT_SPI_BITOPS_DEBUG
-                bool "Use simulate SPI debug message"
-                default n
-        endif
-
-        config RT_USING_QSPI
-            bool "Enable QSPI mode"
-            default n
-
-        config RT_USING_SPI_MSD
-            bool "Using SD/TF card driver with spi"
-            select RT_USING_DFS
-            default n
-
-        config RT_USING_SFUD
-            bool "Using Serial Flash Universal Driver"
-            default n
-            help
-                An using JEDEC's SFDP standard serial (SPI) flash universal driver library
-
-            if RT_USING_SFUD
-                config RT_SFUD_USING_SFDP
-                bool "Using auto probe flash JEDEC SFDP parameter"
-                default y
-
-                config RT_SFUD_USING_FLASH_INFO_TABLE
-                bool "Using defined supported flash chip information table"
-                default y
-
-                config RT_SFUD_USING_QSPI
-                bool "Using QSPI mode support"
-                select RT_USING_QSPI
-                default n
-
-                config RT_SFUD_SPI_MAX_HZ
-                int "Default spi maximum speed(HZ)"
-                range 0 50000000
-                default 50000000
-                help
-                    Read the JEDEC SFDP command must run at 50 MHz or less,and you also can use rt_spi_configure(); to config spi speed.
-
-                config RT_DEBUG_SFUD
-                bool "Show more SFUD debug information"
-                default n
-            endif
-
-        config RT_USING_ENC28J60
-            bool "Using ENC28J60 SPI Ethernet network interface"
-            select RT_USING_LWIP
-            default n
-
-        config RT_USING_SPI_WIFI
-            bool "Using RW009/007 SPI Wi-Fi wireless interface"
-            select RT_USING_LWIP
-            default n
-    endif
-
-config RT_USING_WDT
-    bool "Using Watch Dog device drivers"
-    default n
-
-config RT_USING_AUDIO
-    bool "Using Audio device drivers"
-    default n
-
-    if RT_USING_AUDIO
-        config RT_AUDIO_REPLAY_MP_BLOCK_SIZE
-            int "Replay memory pool block size"
-            default 4096
-
-        config RT_AUDIO_REPLAY_MP_BLOCK_COUNT
-            int "Replay memory pool block count"
+    if RT_USING_PM
+        config PM_TICKLESS_THRESHOLD_TIME
+            int "PM tickless threashold time"
             default 2
 
-        config RT_AUDIO_RECORD_PIPE_SIZE
-            int "Record pipe size"
-            default 2048
+        config PM_USING_CUSTOM_CONFIG
+            bool "PM using custom pm config"
+            default n
+
+        config PM_ENABLE_DEBUG
+            bool "PM Enable Debug"
+            default n
+
+        config PM_ENABLE_SUSPEND_SLEEP_MODE
+            bool "PM Device suspend change sleep mode"
+            default n
+
+        config PM_ENABLE_THRESHOLD_SLEEP_MODE
+            bool "PM using threshold time change sleep mode"
+            default n
+
+        if PM_ENABLE_THRESHOLD_SLEEP_MODE
+            config PM_LIGHT_THRESHOLD_TIME
+                int "PM light mode threashold time"
+                default 5
+
+            config PM_DEEP_THRESHOLD_TIME
+                int "PM deep mode threashold time"
+                default 20
+
+            config PM_STANDBY_THRESHOLD_TIME
+                int "PM standby mode threashold time"
+                default 100
+        endif
     endif
 
 config RT_USING_SENSOR
@@ -269,176 +145,6 @@ config RT_USING_TOUCH
         config RT_TOUCH_PIN_IRQ
         bool "touch irq use pin irq"
         default n
-    endif
-
-config RT_USING_LCD
-    bool "Using LCD graphic drivers"
-    default n
-
-menuconfig RT_USING_HWCRYPTO
-        bool "Using Hardware Crypto drivers"
-        default n
-
-    if RT_USING_HWCRYPTO
-        config RT_HWCRYPTO_DEFAULT_NAME
-            string "Hardware crypto device name"
-            default "hwcryto"
-
-        config RT_HWCRYPTO_IV_MAX_SIZE
-            int "IV max size"
-            default "16"
-
-        config RT_HWCRYPTO_KEYBIT_MAX_SIZE
-            int "Key max bit length"
-            default 256
-
-        config RT_HWCRYPTO_USING_GCM
-            bool "Using Hardware GCM"
-            default n
-
-        config RT_HWCRYPTO_USING_AES
-            bool "Using Hardware AES"
-            default n
-
-        if RT_HWCRYPTO_USING_AES
-            config RT_HWCRYPTO_USING_AES_ECB
-                bool "Using Hardware AES ECB mode"
-                default y
-
-            config RT_HWCRYPTO_USING_AES_CBC
-                bool "Using Hardware AES CBC mode"
-                default n
-
-            config RT_HWCRYPTO_USING_AES_CFB
-                bool "Using Hardware AES CFB mode"
-                default n
-
-            config RT_HWCRYPTO_USING_AES_CTR
-                bool "Using Hardware AES CTR mode"
-                default n
-
-            config RT_HWCRYPTO_USING_AES_OFB
-                bool "Using Hardware AES OFB mode"
-                default n
-        endif
-
-        config RT_HWCRYPTO_USING_DES
-            bool "Using Hardware DES"
-            default n
-
-        if RT_HWCRYPTO_USING_DES
-            config RT_HWCRYPTO_USING_DES_ECB
-                bool "Using Hardware DES ECB mode"
-                default y
-
-            config RT_HWCRYPTO_USING_DES_CBC
-                bool "Using Hardware DES CBC mode"
-                default n
-        endif
-
-        config RT_HWCRYPTO_USING_3DES
-            bool "Using Hardware 3DES"
-            default n
-
-        if RT_HWCRYPTO_USING_3DES
-            config RT_HWCRYPTO_USING_3DES_ECB
-                bool "Using Hardware 3DES ECB mode"
-                default y
-
-            config RT_HWCRYPTO_USING_3DES_CBC
-                bool "Using Hardware 3DES CBC mode"
-                default n
-        endif
-
-        config RT_HWCRYPTO_USING_RC4
-            bool "Using Hardware RC4"
-            default n
-
-        config RT_HWCRYPTO_USING_MD5
-            bool "Using Hardware MD5"
-            default n
-
-        config RT_HWCRYPTO_USING_SHA1
-            bool "Using Hardware SHA1"
-            default n
-
-        config RT_HWCRYPTO_USING_SHA2
-            bool "Using Hardware SHA2"
-            default n
-
-        if RT_HWCRYPTO_USING_SHA2
-            config RT_HWCRYPTO_USING_SHA2_224
-                bool "Using Hardware SHA2_224 mode"
-                default n
-
-            config RT_HWCRYPTO_USING_SHA2_256
-                bool "Using Hardware SHA2_256 mode"
-                default y
-
-            config RT_HWCRYPTO_USING_SHA2_384
-                bool "Using Hardware SHA2_384 mode"
-                default n
-
-            config RT_HWCRYPTO_USING_SHA2_512
-                bool "Using Hardware SHA2_512 mode"
-                default n
-        endif
-
-        config RT_HWCRYPTO_USING_RNG
-            bool "Using Hardware RNG"
-            default n
-
-        config RT_HWCRYPTO_USING_CRC
-            bool "Using Hardware CRC"
-            default n
-
-        if RT_HWCRYPTO_USING_CRC
-            config RT_HWCRYPTO_USING_CRC_07
-                bool "Using Hardware CRC-8 0x07 polynomial"
-                default n
-
-            config RT_HWCRYPTO_USING_CRC_8005
-                bool "Using Hardware CRC-16 0x8005 polynomial"
-                default n
-
-            config RT_HWCRYPTO_USING_CRC_1021
-                bool "Using Hardware CRC-16 0x1021 polynomial"
-                default n
-
-            config RT_HWCRYPTO_USING_CRC_3D65
-                bool "Using Hardware CRC-16 0x3D65 polynomial"
-                default n
-
-            config RT_HWCRYPTO_USING_CRC_04C11DB7
-                bool "Using Hardware CRC-32 0x04C11DB7 polynomial"
-                default n
-        endif
-
-        config RT_HWCRYPTO_USING_BIGNUM
-            bool "Using Hardware bignum"
-            default n
-
-        if RT_HWCRYPTO_USING_BIGNUM
-            config RT_HWCRYPTO_USING_BIGNUM_EXPTMOD
-                bool "Using Hardware bignum expt_mod operation"
-                default y
-
-            config RT_HWCRYPTO_USING_BIGNUM_MULMOD
-                bool "Using Hardware bignum mul_mod operation"
-                default y
-
-            config RT_HWCRYPTO_USING_BIGNUM_MUL
-                bool "Using Hardware bignum mul operation"
-                default n
-
-            config RT_HWCRYPTO_USING_BIGNUM_ADD
-                bool "Using Hardware bignum add operation"
-                default n
-
-            config RT_HWCRYPTO_USING_BIGNUM_SUB
-                bool "Using Hardware bignum sub operation"
-                default n
-        endif
     endif
 
 config RT_USING_PULSE_ENCODER
@@ -611,19 +317,43 @@ menuconfig RT_USING_WIFI
         endif
     endif
 
+source "$RTT_DIR/components/drivers/adc/Kconfig"
+source "$RTT_DIR/components/drivers/audio/Kconfig"
+source "$RTT_DIR/components/drivers/block/Kconfig"
+source "$RTT_DIR/components/drivers/can/Kconfig"
 source "$RTT_DIR/components/drivers/clk/Kconfig"
 source "$RTT_DIR/components/drivers/firmware/Kconfig"
+source "$RTT_DIR/components/drivers/hwcrypto/Kconfig"
+source "$RTT_DIR/components/drivers/hwspinlock/Kconfig"
 source "$RTT_DIR/components/drivers/hwtimer/Kconfig"
+source "$RTT_DIR/components/drivers/i2c/Kconfig"
+source "$RTT_DIR/components/drivers/input/Kconfig"
+source "$RTT_DIR/components/drivers/ivshmem/Kconfig"
+source "$RTT_DIR/components/drivers/led/Kconfig"
+source "$RTT_DIR/components/drivers/mailbox/Kconfig"
 source "$RTT_DIR/components/drivers/mfd/Kconfig"
 source "$RTT_DIR/components/drivers/mtd/Kconfig"
+source "$RTT_DIR/components/drivers/nvmem/Kconfig"
 source "$RTT_DIR/components/drivers/ofw/Kconfig"
 source "$RTT_DIR/components/drivers/pci/Kconfig"
+source "$RTT_DIR/components/drivers/phy/Kconfig"
 source "$RTT_DIR/components/drivers/pic/Kconfig"
+source "$RTT_DIR/components/drivers/pinctrl/Kconfig"
 source "$RTT_DIR/components/drivers/pin/Kconfig"
-source "$RTT_DIR/components/drivers/pm/Kconfig"
+source "$RTT_DIR/components/drivers/pmdomain/Kconfig"
+source "$RTT_DIR/components/drivers/power/Kconfig"
+source "$RTT_DIR/components/drivers/pwm/Kconfig"
+source "$RTT_DIR/components/drivers/regulator/Kconfig"
+source "$RTT_DIR/components/drivers/reset/Kconfig"
 source "$RTT_DIR/components/drivers/rtc/Kconfig"
+source "$RTT_DIR/components/drivers/sdio/Kconfig"
 source "$RTT_DIR/components/drivers/serial/Kconfig"
+source "$RTT_DIR/components/drivers/soc/Kconfig"
+source "$RTT_DIR/components/drivers/spi/Kconfig"
+source "$RTT_DIR/components/drivers/thermal/Kconfig"
+source "$RTT_DIR/components/drivers/video/Kconfig"
 source "$RTT_DIR/components/drivers/virtio/Kconfig"
+source "$RTT_DIR/components/drivers/watchdog/Kconfig"
 
 menu "Using USB"
     config RT_USING_USB

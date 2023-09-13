@@ -1,0 +1,17 @@
+from building import *
+
+group   = []
+
+if not GetDepend(['RT_VIDEO_FB']):
+    Return('group')
+
+cwd     = GetCurrentDir()
+CPPPATH = [cwd + '/../../include']
+
+src     = []
+
+if GetDepend(['RT_VIDEO_FB_SIMPLE']):
+    src += ['fb-simple.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+Return('group')

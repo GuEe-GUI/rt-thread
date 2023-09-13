@@ -1,0 +1,2 @@
+source "$RTT_DIR/components/drivers/power/reset/Kconfig"
+source "$RTT_DIR/components/drivers/power/supply/Kconfig"

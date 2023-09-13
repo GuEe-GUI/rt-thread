@@ -44,4 +44,35 @@ typedef union {
 #define sysreg_read(sysreg, val) \
     __asm__ volatile ("mrs %0, "RT_STRINGIFY(sysreg)"":"=r"((val)))
 
+rt_inline unsigned long __rt_clz(unsigned long word)
+{
+#ifdef __GNUC__
+    return __builtin_clz(word);
+#else
+    unsigned long val;
+
+    __asm__ volatile ("clz %0, %1"
+        :"=r"(val)
+        :"r"(word));
+
+    return val;
+#endif
+}
+
+rt_inline unsigned long __rt_ffsl(unsigned long word)
+{
+#ifdef __GNUC__
+    return __builtin_ffsl(word);
+#else
+    if (!word)
+    {
+        return 0;
+    }
+
+    __asm__ volatile ("rbit %0, %0" : "+r" (word));
+
+    return __rt_clz(word);
+#endif
+}
+
 #endif  /*CPUPORT_H__*/

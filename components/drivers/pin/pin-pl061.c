@@ -12,6 +12,8 @@
 #include <rtthread.h>
 #include <rtdevice.h>
 
+#include "pin_dm.h"
+
 #define PL061_DIR       0x400
 #define PL061_IS        0x404
 #define PL061_IBE       0x408
@@ -25,13 +27,15 @@
 
 struct pl061
 {
-    void *base;
-    int irq;
+    struct rt_device_pin parent;
 
+    int irq;
+    void *base;
+
+    struct rt_clk *pclk;
     struct rt_spinlock spinlock;
 
-    void (*hdr[PL061_GPIO_NR])(void *args);
-    void *args[PL061_GPIO_NR];
+    struct rt_pin_irq_hdr hdr[PL061_GPIO_NR];
 };
 
 #define raw_to_pl061(raw) ((struct pl061 *)((raw)->user_data))
@@ -64,11 +68,15 @@ static void pl061_isr(int irqno, void *param)
         {
             if (pending & RT_BIT(pin))
             {
+                struct rt_pin_irq_hdr *hdr_info = &pl061->hdr[pin];
+
                 mask |= RT_BIT(pin);
 
-                if (pl061->hdr[pin])
+                pin_pic_handle_isr(&pl061->parent, pin);
+
+                if (hdr_info->hdr)
                 {
-                    pl061->hdr[pin](pl061->args[pin]);
+                    hdr_info->hdr(hdr_info->args);
                 }
             }
         }
@@ -141,8 +149,93 @@ static rt_int8_t pl061_pin_read(struct rt_device *device, rt_base_t pin)
     return value;
 }
 
+static rt_err_t pl061_pin_irq_mode(struct rt_device *device, rt_base_t pin, rt_uint8_t mode);
+
 static rt_err_t pl061_pin_attach_irq(struct rt_device *device, rt_base_t pin,
         rt_uint8_t mode, void (*hdr)(void *args), void *args)
+{
+    rt_err_t err;
+    rt_ubase_t level;
+    struct rt_pin_irq_hdr *hdr_info;
+    struct pl061 *pl061 = raw_to_pl061(device);
+
+    if (pin < 0 || pin >= PL061_GPIO_NR)
+    {
+        return -RT_EINVAL;
+    }
+
+    if ((err = pl061_pin_irq_mode(device, pin, mode)))
+    {
+        return err;
+    }
+
+    level = rt_spin_lock_irqsave(&pl061->spinlock);
+
+    hdr_info = &pl061->hdr[pin];
+    hdr_info->hdr = hdr;
+    hdr_info->args = args;
+
+    rt_spin_unlock_irqrestore(&pl061->spinlock, level);
+
+    return err;
+}
+
+static rt_err_t pl061_pin_detach_irq(struct rt_device *device, rt_base_t pin)
+{
+    rt_err_t err = RT_EOK;
+    struct rt_pin_irq_hdr *hdr_info;
+    struct pl061 *pl061 = raw_to_pl061(device);
+
+    if (pin >= 0 && pin < PL061_GPIO_NR)
+    {
+        rt_ubase_t level = rt_spin_lock_irqsave(&pl061->spinlock);
+
+        hdr_info = &pl061->hdr[pin];
+        hdr_info->hdr = RT_NULL;
+        hdr_info->args = RT_NULL;
+
+        rt_spin_unlock_irqrestore(&pl061->spinlock, level);
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}
+
+static rt_err_t pl061_pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled)
+{
+    rt_err_t err = RT_EOK;
+    struct pl061 *pl061 = raw_to_pl061(device);
+
+    if (pin >= 0 && pin < PL061_GPIO_NR)
+    {
+        rt_uint8_t gpioie, mask = RT_BIT(pin);
+        rt_ubase_t level = rt_spin_lock_irqsave(&pl061->spinlock);
+
+        if (enabled)
+        {
+            gpioie = pl061_read(pl061, PL061_IE) | mask;
+        }
+        else
+        {
+            gpioie = pl061_read(pl061, PL061_IE) & ~mask;
+        }
+
+        pl061_write(pl061, PL061_IE, gpioie);
+
+        rt_spin_unlock_irqrestore(&pl061->spinlock, level);
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}
+
+static rt_err_t pl061_pin_irq_mode(struct rt_device *device, rt_base_t pin, rt_uint8_t mode)
 {
     rt_err_t err = RT_EOK;
     struct pl061 *pl061 = raw_to_pl061(device);
@@ -213,62 +306,6 @@ static rt_err_t pl061_pin_attach_irq(struct rt_device *device, rt_base_t pin,
         pl061_write(pl061, PL061_IBE, gpioibe);
         pl061_write(pl061, PL061_IEV, gpioiev);
 
-        pl061->hdr[pin] = hdr;
-        pl061->args[pin] = args;
-
-        rt_spin_unlock_irqrestore(&pl061->spinlock, level);
-    }
-    else
-    {
-        err = -RT_EINVAL;
-    }
-
-    return err;
-}
-
-static rt_err_t pl061_pin_detach_irq(struct rt_device *device, rt_base_t pin)
-{
-    rt_err_t err = RT_EOK;
-    struct pl061 *pl061 = raw_to_pl061(device);
-
-    if (pin >= 0 && pin < PL061_GPIO_NR)
-    {
-        rt_ubase_t level = rt_spin_lock_irqsave(&pl061->spinlock);
-
-        pl061->hdr[pin] = RT_NULL;
-        pl061->args[pin] = RT_NULL;
-
-        rt_spin_unlock_irqrestore(&pl061->spinlock, level);
-    }
-    else
-    {
-        err = -RT_EINVAL;
-    }
-
-    return err;
-}
-
-static rt_err_t pl061_pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled)
-{
-    rt_err_t err = RT_EOK;
-    struct pl061 *pl061 = raw_to_pl061(device);
-
-    if (pin >= 0 && pin < PL061_GPIO_NR)
-    {
-        rt_uint8_t gpioie, mask = RT_BIT(pin);
-        rt_ubase_t level = rt_spin_lock_irqsave(&pl061->spinlock);
-
-        if (enabled)
-        {
-            gpioie = pl061_read(pl061, PL061_IE) | mask;
-        }
-        else
-        {
-            gpioie = pl061_read(pl061, PL061_IE) & ~mask;
-        }
-
-        pl061_write(pl061, PL061_IE, gpioie);
-
         rt_spin_unlock_irqrestore(&pl061->spinlock, level);
     }
     else
@@ -287,59 +324,82 @@ static const struct rt_pin_ops pl061_pin_ops =
     .pin_attach_irq = pl061_pin_attach_irq,
     .pin_detach_irq = pl061_pin_detach_irq,
     .pin_irq_enable = pl061_pin_irq_enable,
+    .pin_irq_mode = pl061_pin_irq_mode,
 };
-
-static rt_err_t pl061_ofw_init(struct rt_platform_device *pdev, struct pl061 *pl061)
-{
-    rt_err_t err = RT_EOK;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
-
-    pl061->base = rt_ofw_iomap(np, 0);
-
-    if (pl061->base)
-    {
-        pl061->irq = rt_ofw_get_irq(np, 0);
-
-        if (pl061->irq < 0)
-        {
-            err = -RT_ERROR;
-        }
-    }
-    else
-    {
-        err = -RT_EIO;
-    }
-
-    return err;
-}
 
 static rt_err_t pl061_probe(struct rt_platform_device *pdev)
 {
-    rt_err_t err = RT_EOK;
+    rt_err_t err;
+    struct rt_device *dev = &pdev->parent;
     struct pl061 *pl061 = rt_calloc(1, sizeof(*pl061));
 
-    if (pl061)
+    if (!pl061)
     {
-        err = pl061_ofw_init(pdev, pl061);
-    }
-    else
-    {
-        err = -RT_ENOMEM;
+        return -RT_ENOMEM;
     }
 
-    if (!err)
-    {
-        rt_spin_lock_init(&pl061->spinlock);
+    pl061->base = rt_dm_dev_iomap(dev, 0);
 
-        rt_device_pin_register("gpio", &pl061_pin_ops, pl061);
-
-        rt_hw_interrupt_install(pl061->irq, pl061_isr, pl061, "gpio-pl061");
-        rt_hw_interrupt_umask(pl061->irq);
-    }
-    else
+    if (!pl061->base)
     {
-        rt_free(pl061);
+        err = -RT_EIO;
+
+        goto _fail;
     }
+
+    pl061->irq = rt_dm_dev_get_irq(dev, 0);
+
+    if (pl061->irq < 0)
+    {
+        err = pl061->irq;
+
+        goto _fail;
+    }
+
+    pl061->pclk = rt_clk_get_by_name(dev, "apb_pclk");
+
+    if (rt_is_err(pl061->pclk))
+    {
+        err = rt_ptr_err(pl061->pclk);
+
+        goto _fail;
+    }
+
+    if ((err = rt_clk_prepare_enable(pl061->pclk)))
+    {
+        goto _fail;
+    }
+
+    rt_dm_dev_bind_fwdata(dev, RT_NULL, &pl061->parent);
+
+    rt_spin_lock_init(&pl061->spinlock);
+
+    pl061->parent.irqchip.irq = pl061->irq;
+    pl061->parent.irqchip.pin_range[0] = 0;
+    pl061->parent.irqchip.pin_range[1] = PL061_GPIO_NR - 1;
+    pl061->parent.ops = &pl061_pin_ops;
+    pin_pic_init(&pl061->parent);
+
+    rt_device_pin_register("gpio", &pl061_pin_ops, pl061);
+
+    rt_hw_interrupt_install(pl061->irq, pl061_isr, pl061, "gpio-pl061");
+    rt_hw_interrupt_umask(pl061->irq);
+
+    return RT_EOK;
+
+_fail:
+    if (pl061->base)
+    {
+        rt_iounmap(pl061->base);
+    }
+
+    if (!rt_is_err_or_null(pl061->pclk))
+    {
+        rt_clk_disable_unprepare(pl061->pclk);
+        rt_clk_put(pl061->pclk);
+    }
+
+    rt_free(pl061);
 
     return err;
 }

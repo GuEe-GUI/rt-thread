@@ -8,11 +8,7 @@
  * 2022-11-16     GuEe-GUI     first version
  */
 
-#include <ioremap.h>
-
-#include <rt_irqchip.h>
-#include <serial8250.h>
-#include <serial_internal.h>
+#include "8250.h"
 
 rt_err_t serial8250_config(struct serial8250 *serial, const char *options)
 {
@@ -38,7 +34,7 @@ rt_err_t serial8250_config(struct serial8250 *serial, const char *options)
                 ret = RT_EOK;
                 continue;
             }
-            /* user call error */
+            /* User call error */
             if (ret)
             {
                 break;
@@ -65,7 +61,7 @@ rt_err_t serial8250_config(struct serial8250 *serial, const char *options)
 
                 serial->iotype = PORT_MMIO32;
 
-                for (int i = 0; i < rt_array_size(iotype_table); ++i)
+                for (int i = 0; i < RT_ARRAY_SIZE(iotype_table); ++i)
                 {
                     if (!rt_strcmp(arg, iotype_table[i].param))
                     {
@@ -105,21 +101,45 @@ static void serial8250_isr(int irqno, void *param)
     }
 }
 
+static rt_err_t serial8250_dma_enable_dummy(struct serial8250 *serial, rt_bool_t enabled)
+{
+    return RT_EOK;
+}
+
+static rt_ssize_t serial8250_dma_tx_dummy(struct serial8250 *serial,
+        const rt_uint8_t *buf, rt_size_t size)
+{
+    return 0;
+}
+
+static rt_ssize_t serial8250_dma_rx_dummy(struct serial8250 *serial,
+        rt_uint8_t *buf, rt_size_t size)
+{
+    return 0;
+}
+
 rt_err_t serial8250_setup(struct serial8250 *serial)
 {
     rt_err_t ret = RT_EOK;
+    const char *uart_name;
     char dev_name[RT_NAME_MAX];
 
     if (serial)
     {
-        rt_hw_spin_lock_init(&serial->spinlock);
+        rt_spin_lock_init(&serial->spinlock);
 
-        serial->serial_in = serial->serial_in ? serial->serial_in : &serial8250_in;
-        serial->serial_out = serial->serial_out ? serial->serial_out : &serial8250_out;
+        serial->serial_in = serial->serial_in ? : &serial8250_in;
+        serial->serial_out = serial->serial_out ? : &serial8250_out;
+        serial->serial_dma_enable = serial->serial_dma_enable ? : &serial8250_dma_enable_dummy;
+        serial->serial_dma_tx = serial->serial_dma_tx ? : &serial8250_dma_tx_dummy;
+        serial->serial_dma_rx = serial->serial_dma_rx ? : &serial8250_dma_rx_dummy;
 
-        rt_sprintf(dev_name, "uart%d", serial_next_id());
+        serial_dev_set_name(&serial->parent);
+        uart_name = rt_dm_dev_get_name(&serial->parent.parent);
 
-        rt_hw_serial_register(&serial->parent, dev_name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX, serial->data);
+        rt_hw_serial_register(&serial->parent, uart_name, RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX, serial->data);
+
+        rt_snprintf(dev_name, sizeof(dev_name), "%s-8250", uart_name);
         rt_hw_interrupt_install(serial->irq, serial8250_isr, serial, dev_name);
     }
     else
@@ -128,6 +148,26 @@ rt_err_t serial8250_setup(struct serial8250 *serial)
     }
 
     return ret;
+}
+
+rt_err_t serial8250_remove(struct serial8250 *serial)
+{
+    rt_err_t err;
+
+    rt_iounmap((void *)serial->base);
+    serial->base = RT_NULL;
+
+    rt_hw_interrupt_mask(serial->irq);
+    rt_pic_detach_irq(serial->irq, serial);
+
+    err = rt_device_unregister(&serial->parent.parent);
+
+    if (!err && serial->remove)
+    {
+        serial->remove(serial);
+    }
+
+    return err;
 }
 
 rt_uint32_t serial8250_in(struct serial8250 *serial, int offset)
@@ -189,80 +229,111 @@ void serial8250_out(struct serial8250 *serial, int offset, int value)
     }
 }
 
-rt_err_t serial8250_uart_configure(struct rt_serial_device *raw_serial, struct serial_configure *cfg)
+void serial8250_dma_tx_done(struct serial8250 *serial)
 {
-    rt_err_t ret = RT_EOK;
-    struct serial8250 *serial = raw_to_serial8250(raw_serial);
+    rt_hw_serial_isr(&serial->parent, RT_SERIAL_EVENT_TX_DMADONE);
+}
 
-    serial->serial_out(serial, UART_IER, !UART_IER_RDI);
+void serial8250_dma_rx_done(struct serial8250 *serial, int recv_len)
+{
+    rt_hw_serial_isr(&serial->parent, RT_SERIAL_EVENT_RX_DMADONE | (recv_len << 8));
+}
 
-    /* Enable FIFO, Clear FIFO*/
-    serial->serial_out(serial, UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT);
+rt_err_t serial8250_ios(struct serial8250 *serial, struct serial_configure *cfg)
+{
+    rt_err_t err = RT_EOK;
 
     /* Disable interrupt */
-    serial->serial_out(serial, UART_IER, 0);
+    serial->serial_out(serial, UART_IER, !UART_IER_RDI);
+
+    /* Enable FIFO, Clear FIFO */
+    serial->serial_out(serial, UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT);
 
     /* DTR + RTS */
-    serial->serial_out(serial, UART_MCR, 0x3);
+    serial->serial_out(serial, UART_MCR, UART_MCR_DTR | UART_MCR_RTS);
+
     if (serial->freq)
     {
-        unsigned char lcr = serial8250_in(serial, UART_LCR);
-        rt_uint32_t wlen = cfg->data_bits + (UART_LCR_WLEN5 - DATA_BITS_5);
-    #if 0
+        rt_uint32_t wlen = cfg->data_bits - DATA_BITS_5 + UART_LCR_WLEN5;
         rt_uint32_t divisor = serial->freq / 16 / cfg->baud_rate;
 
         /* Enable access DLL & DLH */
-        serial->serial_out(serial, UART_LCR, lcr | UART_LCR_DLAB);
+        serial->serial_out(serial, UART_LCR, serial->serial_in(serial, UART_LCR) | UART_LCR_DLAB);
         serial->serial_out(serial, UART_DLL, (divisor & 0xff));
         serial->serial_out(serial, UART_DLM, (divisor >> 8) & 0xff);
         /* Clear DLAB bit */
-        serial->serial_out(serial, UART_LCR, lcr & (~UART_LCR_DLAB));
-    #endif
+        serial->serial_out(serial, UART_LCR, serial->serial_in(serial, UART_LCR) & (~UART_LCR_DLAB));
 
-        serial->serial_out(serial, UART_LCR, (lcr & (~wlen)) | wlen);
-        serial->serial_out(serial, UART_LCR, lcr & (~UART_LCR_STOP));
-        serial->serial_out(serial, UART_LCR, lcr & (~UART_LCR_PARITY));
+        serial->serial_out(serial, UART_LCR, (serial->serial_in(serial, UART_LCR) & (~wlen)) | wlen);
+        serial->serial_out(serial, UART_LCR, serial->serial_in(serial, UART_LCR) & (~UART_LCR_STOP));
+        serial->serial_out(serial, UART_LCR, serial->serial_in(serial, UART_LCR) & (~UART_LCR_PARITY));
     }
 
     serial->serial_out(serial, UART_IER, UART_IER_RDI);
 
-    return ret;
+    return err;
+}
+
+rt_err_t serial8250_uart_configure(struct rt_serial_device *raw_serial, struct serial_configure *cfg)
+{
+    rt_err_t err;
+    struct serial8250 *serial = raw_to_serial8250(raw_serial);
+
+    if (serial->serial_ios)
+    {
+        err = serial->serial_ios(serial, cfg);
+    }
+    else
+    {
+        err = serial8250_ios(serial, cfg);
+    }
+
+    return err;
 }
 
 rt_err_t serial8250_uart_control(struct rt_serial_device *raw_serial, int cmd, void *arg)
 {
-    rt_err_t ret = RT_EOK;
+    rt_err_t err = RT_EOK;
+    rt_ubase_t ctrl = (rt_ubase_t)arg;
     struct serial8250 *serial = raw_to_serial8250(raw_serial);
 
     switch (cmd)
     {
-        case RT_DEVICE_CTRL_CLR_INT:
-            /* disable rx irq */
+    case RT_DEVICE_CTRL_CLR_INT:
+        if (ctrl == RT_DEVICE_FLAG_INT_RX)
+        {
+            /* Disable rx irq */
             serial->serial_out(serial, UART_IER, !UART_IER_RDI);
             rt_hw_interrupt_mask(serial->irq);
-            break;
+        }
+        else if (ctrl == RT_DEVICE_FLAG_DMA_RX)
+        {
+            err = serial->serial_dma_enable(serial, RT_FALSE);
+        }
+        break;
 
-        case RT_DEVICE_CTRL_SET_INT:
-            /* enable rx irq */
+    case RT_DEVICE_CTRL_SET_INT:
+        if (ctrl == RT_DEVICE_FLAG_INT_RX)
+        {
+            /* Enable rx irq */
             serial->serial_out(serial, UART_IER, UART_IER_RDI);
             rt_hw_interrupt_umask(serial->irq);
-            break;
+        }
+        else if (ctrl == RT_DEVICE_FLAG_DMA_RX)
+        {
+            err = serial->serial_dma_enable(serial, RT_TRUE);
+        }
 
-        case RT_DEVICE_CTRL_SHUTDOWN:
-            rt_iounmap((void *)serial->base);
-            rt_hw_interrupt_mask(serial->irq);
-            rt_hw_interrupt_uninstall(serial->irq, serial8250_isr, serial);
+    case RT_DEVICE_CTRL_CLOSE:
+        err = serial->serial_dma_enable(serial, RT_FALSE);
+        break;
 
-            rt_device_unregister(&serial->parent.parent);
-
-            if (serial->remove)
-            {
-                serial->remove(serial);
-            }
-            break;
+    default:
+        err = -RT_EINVAL;
+        break;
     }
 
-    return ret;
+    return err;
 }
 
 int serial8250_uart_putc(struct rt_serial_device *raw_serial, char c)
@@ -271,6 +342,7 @@ int serial8250_uart_putc(struct rt_serial_device *raw_serial, char c)
 
     while (!(serial->serial_in(serial, UART_LSR) & 0x20))
     {
+        rt_hw_cpu_relax();
     }
 
     serial->serial_out(serial, UART_TX, c);
@@ -291,10 +363,29 @@ int serial8250_uart_getc(struct rt_serial_device *raw_serial)
     return ch;
 }
 
+rt_ssize_t serial8250_uart_dma_transmit(struct rt_serial_device *raw_serial,
+        rt_uint8_t *buf, rt_size_t size, int direction)
+{
+    rt_ssize_t res = 0;
+    struct serial8250 *serial = raw_to_serial8250(raw_serial);
+
+    if (direction == RT_SERIAL_DMA_TX)
+    {
+        res = serial->serial_dma_tx(serial, (const rt_uint8_t *)buf, size);
+    }
+    else if (direction == RT_SERIAL_DMA_RX)
+    {
+        res = serial->serial_dma_rx(serial, buf, size);
+    }
+
+    return res;
+}
+
 const struct rt_uart_ops serial8250_uart_ops =
 {
-    serial8250_uart_configure,
-    serial8250_uart_control,
-    serial8250_uart_putc,
-    serial8250_uart_getc,
+    .configure = serial8250_uart_configure,
+    .control = serial8250_uart_control,
+    .putc = serial8250_uart_putc,
+    .getc = serial8250_uart_getc,
+    .dma_transmit = serial8250_uart_dma_transmit,
 };

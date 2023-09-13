@@ -1,0 +1,25 @@
+menuconfig RT_SOC_ROCKCHIP
+    bool "RockChip"
+    default n
+
+if RT_SOC_ROCKCHIP
+config RT_SOC_ROCKCHIP_FIQ_DEBUGGER
+    bool "FIQ Debugger"
+    select RT_USING_OFW
+    default y
+
+config RT_SOC_ROCKCHIP_GRF
+    bool "General Register Files support"
+    select RT_MFD_SYSCON
+    default y
+
+config RT_SOC_ROCKCHIP_HW_DECOMPRESS
+    bool "HardWare Decompress (LZ4, GZIP, ZLIB)"
+    default y
+
+config RT_SOC_ROCKCHIP_IODOMAIN
+    bool "IO domain support"
+    select RT_MFD_SYSCON
+    select RT_USING_REGULATOR
+    default y
+endif

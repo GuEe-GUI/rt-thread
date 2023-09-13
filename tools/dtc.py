@@ -25,4 +25,4 @@ def dts_to_dtb(RTT_ROOT, dts_list):
         dtb = path + dts.replace('.dts', '.dtb')
         dts = path + dts
         if not os.path.exists(dtb) or os.path.getmtime(dtb) < os.path.getmtime(dts):
-            os.system("\"{}\" -I dts -O dtb {} -o {}".format(dtc_cmd, dts, dtb))
+            os.system("\"{}\" -I dts -O dtb -@ -A {} -o {}".format(dtc_cmd, dts, dtb))

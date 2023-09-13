@@ -1,4 +1,15 @@
 menuconfig RT_USING_CLK
     bool "Using Common Clock Framework (CLK)"
     depends on RT_USING_DM
-    default n
+    select RT_USING_ADT_REF
+    default y
+
+config RT_CLK_SCMI
+    bool "Clock driver controlled via SCMI interface"
+    depends on RT_USING_CLK
+    depends on RT_FIRMWARE_ARM_SCMI
+    default y
+
+if RT_USING_CLK
+source "$RTT_DIR/components/drivers/clk/rockchip/Kconfig"
+endif

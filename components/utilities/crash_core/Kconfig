@@ -1,0 +1,3 @@
+menuconfig RT_USING_CRASH_CORE
+    bool "Enable Crash Core"
+    default n

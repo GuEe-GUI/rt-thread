@@ -22,7 +22,7 @@ struct virtio_console_config
     rt_uint16_t rows;
     rt_uint32_t max_nr_ports;
     rt_uint32_t emerg_wr;
-} __attribute__((packed));
+} rt_packed;
 
 struct virtio_console_control
 {

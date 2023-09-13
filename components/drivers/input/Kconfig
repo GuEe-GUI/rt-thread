@@ -1,0 +1,10 @@
+menuconfig RT_USING_INPUT
+    bool "Using Input device drivers"
+    depends on RT_USING_DM
+    default n
+
+if RT_USING_INPUT
+source "$RTT_DIR/components/drivers/input/keyboard/Kconfig"
+source "$RTT_DIR/components/drivers/input/misc/Kconfig"
+source "$RTT_DIR/components/drivers/input/touchscreen/Kconfig"
+endif

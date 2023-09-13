@@ -1,0 +1,25 @@
+menuconfig RT_SERIAL_VIRTUAL
+    bool "Virtual Serial in video"
+    select RT_VIDEO_FB
+    select RT_INPUT_KEYBOARD
+    default n
+
+config RT_SERIAL_VIRTUAL_FBDEV
+    string "framebuffer device"
+    default "fb0"
+
+config RT_SERIAL_VIRTUAL_KDBDEV
+    string "keyboard device"
+    default "kdb0"
+
+choice
+    prompt "Rendering font(psf)"
+    default RT_SERIAL_VIRTUAL_FONT_UNI2_FIXED16
+    depends on RT_SERIAL_VIRTUAL
+
+    config RT_SERIAL_VIRTUAL_FONT_UNI2_FIXED16
+        bool "uni2 fixed16"
+
+    config RT_SERIAL_VIRTUAL_FONT_UNI2_VGA16
+        bool "uni2 vga16"
+endchoice

@@ -56,7 +56,7 @@ struct virtio_input_config
         struct virtio_input_absinfo abs;
         struct virtio_input_devids ids;
     };
-} __attribute__((packed));
+} rt_packed;
 
 struct virtio_input_event
 {

@@ -32,6 +32,7 @@
 
 #define raw_to_gicv2(raw) rt_container_of(raw, struct gicv2, parent)
 
+static rt_bool_t needs_rmw_access = RT_FALSE;
 static int _gicv2_nr = 0, _init_cpu_id = 0;
 static struct gicv2 _gicv2_list[RT_PIC_ARM_GIC_MAX_NR] = {};
 static rt_bool_t _gicv2_eoi_mode_ns = RT_FALSE;
@@ -200,8 +201,31 @@ static rt_err_t gicv2_irq_set_affinity(struct rt_pic_irq *pirq, bitmap_t *affini
     int hwirq = pirq->hwirq;
     struct gicv2 *gic = raw_to_gicv2(pirq->pic);
     rt_uint32_t target_list = ((rt_uint8_t *)affinity)[gic - &_gicv2_list[0]];
+    rt_uint8_t valb = _gicv2_cpumask_map[__rt_ffs(target_list) - 1];
+    void *io_addr = gic->dist_base + GIC_DIST_TARGET + hwirq;
 
-    HWREG32(gic->dist_base + GIC_DIST_TARGET + hwirq) = _gicv2_cpumask_map[__rt_ffs(target_list) - 1];
+    if (rt_unlikely(needs_rmw_access))
+    {
+        /* RMW write byte */
+        rt_uint32_t val;
+        rt_ubase_t level;
+        rt_ubase_t offset = (rt_ubase_t)io_addr & 3UL, shift = offset * 8;
+        static struct rt_spinlock rmw_lock = {};
+
+        level = rt_spin_lock_irqsave(&rmw_lock);
+
+        io_addr -= offset;
+        val = HWREG32(io_addr);
+        val &= ~RT_GENMASK(shift + 7, shift);
+        val |= valb << shift;
+        HWREG32(io_addr) = val;
+
+        rt_spin_unlock_irqrestore(&rmw_lock, level);
+    }
+    else
+    {
+        HWREG8(io_addr) = valb;
+    }
 
     return RT_EOK;
 }
@@ -252,12 +276,16 @@ static int gicv2_irq_map(struct rt_pic *pic, int hwirq, rt_uint32_t mode)
 
     if (pirq && hwirq >= GIC_SGI_NR)
     {
-        pirq->hwirq = hwirq;
         pirq->mode = mode;
         pirq->priority = GICD_INT_DEF_PRI;
         bitmap_set_bit(pirq->affinity, _init_cpu_id);
 
         irq = rt_pic_config_irq(pic, irq_index, hwirq);
+
+        if (irq >= 0 && mode != RT_IRQ_MODE_LEVEL_HIGH)
+        {
+            gicv2_irq_set_triger_mode(pirq, mode);
+        }
     }
     else
     {
@@ -298,7 +326,7 @@ static rt_err_t gicv2_irq_parse(struct rt_pic *pic, struct rt_ofw_cell_args *arg
     return err;
 }
 
-static struct rt_pic_ops gicv2_ops =
+const static struct rt_pic_ops gicv2_ops =
 {
     .name = "GICv2",
     .irq_init = gicv2_irq_init,
@@ -349,8 +377,24 @@ static rt_bool_t gicv2_handler(void *data)
     return res;
 }
 
+static rt_err_t gicv2_enable_rmw_access(void *data)
+{
+    if (rt_ofw_machine_is_compatible("renesas,emev2"))
+    {
+        needs_rmw_access = RT_TRUE;
+        return RT_EOK;
+    }
+
+    return -RT_EINVAL;
+}
+
 static const struct gic_quirk _gicv2_quirks[] =
 {
+    {
+        .desc       = "GICv2: Broken byte access",
+        .compatible = "arm,pl390",
+        .init       = gicv2_enable_rmw_access,
+    },
     { /* sentinel */ }
 };
 

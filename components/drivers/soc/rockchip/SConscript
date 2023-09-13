@@ -1,0 +1,26 @@
+from building import *
+
+group   = []
+
+if not GetDepend(['RT_SOC_ROCKCHIP']):
+    Return('group')
+
+cwd     = GetCurrentDir()
+CPPPATH = [cwd + '/../../include']
+
+src     = []
+
+if GetDepend(['RT_SOC_ROCKCHIP_FIQ_DEBUGGER']):
+    src += ['fiq-debugger.c']
+
+if GetDepend(['RT_SOC_ROCKCHIP_GRF']):
+    src += ['grf.c']
+
+if GetDepend(['RT_SOC_ROCKCHIP_HW_DECOMPRESS']):
+    src += ['hw-decompress.c']
+
+if GetDepend(['RT_SOC_ROCKCHIP_IODOMAIN']):
+    src += ['io-domain.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+Return('group')

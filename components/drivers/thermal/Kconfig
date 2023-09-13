@@ -1,0 +1,27 @@
+menuconfig RT_USING_THERMAL
+    bool "Using Thermal Management device drivers"
+    depends on RT_USING_DM
+    default n
+
+config RT_THERMAL_BCM2835
+    bool "Thermal sensors on bcm2835 SoC"
+    depends on RT_USING_DM
+    depends on RT_USING_THERMAL
+    default n
+
+config RT_THERMAL_BCM2711
+    bool "Thermal sensors on bcm2711 SoC"
+    depends on RT_USING_DM
+    depends on RT_USING_THERMAL
+    select RT_MFD_SYSCON
+    select RT_USING_RESET
+    default n
+
+config RT_THERMAL_ROCKCHIP_TSADC
+    bool "Rockchip TS-ADC driver"
+    depends on RT_USING_DM
+    depends on RT_USING_THERMAL
+    select RT_MFD_SYSCON
+    select RT_USING_RESET
+    default n
+

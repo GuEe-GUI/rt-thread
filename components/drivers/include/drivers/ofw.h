@@ -22,6 +22,10 @@ typedef rt_uint32_t rt_phandle;
 
 struct rt_ofw_prop
 {
+#ifdef RT_USING_OFW_DIRECTFS
+    struct rt_object obj;
+#endif
+
     const char *name;
     int length;
     void *value;
@@ -31,6 +35,10 @@ struct rt_ofw_prop
 
 struct rt_ofw_node
 {
+#ifdef RT_USING_OFW_DIRECTFS
+    struct rt_object obj;
+#endif
+
     const char *name;
     /* full_name is 'path/tag' or 'path/tag@reg' */
     const char *full_name;
@@ -205,11 +213,15 @@ struct rt_ofw_node *rt_ofw_get_alias_node(const char *tag, int id);
 int rt_ofw_get_alias_id(struct rt_ofw_node *np, const char *tag);
 int rt_ofw_get_alias_last_id(const char *tag);
 
+struct rt_ofw_node *rt_ofw_append_child(struct rt_ofw_node *parent, const char *full_name);
+rt_err_t rt_ofw_append_prop(struct rt_ofw_node *np, const char *name, int length, void *value);
+
 struct rt_ofw_node *rt_ofw_parse_phandle(const struct rt_ofw_node *np, const char *phandle_name, int index);
 rt_err_t rt_ofw_parse_phandle_cells(const struct rt_ofw_node *np, const char *list_name, const char *cells_name,
         int index, struct rt_ofw_cell_args *out_args);
 int rt_ofw_count_phandle_cells(const struct rt_ofw_node *np, const char *list_name, const char *cells_name);
 
+const char *rt_ofw_get_prop_fuzzy_name(const struct rt_ofw_node *np, const char *name);
 struct rt_ofw_prop *rt_ofw_get_prop(const struct rt_ofw_node *np, const char *name, rt_ssize_t *out_length);
 
 rt_inline const void *rt_ofw_prop_read_raw(const struct rt_ofw_node *np, const char *name, rt_ssize_t *out_length)
@@ -422,6 +434,8 @@ rt_inline rt_bool_t rt_ofw_node_is_type(const struct rt_ofw_node *np, const char
 
 struct rt_ofw_stub *rt_ofw_stub_probe_range(struct rt_ofw_node *np,
         const struct rt_ofw_stub *stub_start, const struct rt_ofw_stub *stub_end);
+
+struct rt_object *rt_ofw_parse_object(struct rt_ofw_node *np, const char *obj_name, const char *cells_name);
 
 rt_err_t rt_ofw_console_setup(void);
 const char *rt_ofw_bootargs_select(const char *key, int index);

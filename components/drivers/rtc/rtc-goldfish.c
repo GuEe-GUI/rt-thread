@@ -8,11 +8,7 @@
  * 2022-11-26     GuEe-GUI     first version
  */
 
-#include <rthw.h>
-#include <rtthread.h>
-#include <rtdevice.h>
-
-#include <sys/time.h>
+#include "rtc_dm.h"
 
 #define GOLDFISH_RTC_TIME_LOW           0x00 /* get low bits of current time and update GOLDFISH_RTC_TIME_HIGH */
 #define GOLDFISH_RTC_TIME_HIGH          0x04 /* get high bits of time at last GOLDFISH_RTC_TIME_LOW read */
@@ -67,7 +63,7 @@ static void goldfish_rtc_get_secs(struct goldfish_rtc *grtc, time_t *sec)
         time |= time_high << 32;
     }
 
-    do_div(time, NSEC_PER_SEC);
+    rt_do_div(time, NSEC_PER_SEC);
 
     rt_memcpy(sec, &time, sizeof(*sec));
 }
@@ -184,68 +180,77 @@ const static struct rt_device_ops goldfish_rtc_ops =
 };
 #endif
 
-static rt_err_t goldfish_rtc_ofw_init(struct rt_platform_device *pdev, struct goldfish_rtc *grtc)
+static rt_err_t goldfish_rtc_probe(struct rt_platform_device *pdev)
 {
     rt_err_t err = RT_EOK;
-    struct rt_ofw_node *np = pdev->parent.ofw_node;
+    const char *dev_name;
+    struct rt_device *dev = &pdev->parent;
+    struct goldfish_rtc *grtc = rt_calloc(1, sizeof(*grtc));
 
-    grtc->base = rt_ofw_iomap(np, 0);
-
-    if (grtc->base)
+    if (!grtc)
     {
-        grtc->irq = rt_ofw_get_irq(np, 0);
-
-        if (grtc->irq >= 0)
-        {
-            rt_ofw_data(np) = &grtc->parent;
-        }
-        else
-        {
-            err = -RT_ERROR;
-        }
+        return -RT_ENOMEM;
     }
-    else
+
+    grtc->base = rt_dm_dev_iomap(dev, 0);
+
+    if (!grtc->base)
     {
         err = -RT_EIO;
+        goto _fail;
     }
+
+    grtc->irq = rt_dm_dev_get_irq(dev, 0);
+
+    if (grtc->irq < 0)
+    {
+        err = grtc->irq;
+        goto _fail;
+    }
+
+    dev->user_data = grtc;
+
+    grtc->parent.type = RT_Device_Class_RTC;
+#ifdef RT_USING_DEVICE_OPS
+    grtc->parent.ops = &goldfish_rtc_ops;
+#else
+    grtc->parent.control = goldfish_rtc_control;
+#endif
+
+    rtc_dev_set_name(&grtc->parent);
+    dev_name = rt_dm_dev_get_name(&grtc->parent);
+    rt_device_register(&grtc->parent, dev_name, RT_DEVICE_FLAG_RDWR);
+
+    rt_hw_interrupt_install(grtc->irq, goldfish_rtc_isr, grtc, "rtc-goldfish");
+    rt_hw_interrupt_umask(grtc->irq);
+
+    return RT_EOK;
+
+_fail:
+    if (grtc->base)
+    {
+        rt_iounmap(grtc->base);
+    }
+
+    rt_free(grtc);
 
     return err;
 }
 
-static rt_err_t goldfish_rtc_probe(struct rt_platform_device *pdev)
+static rt_err_t goldfish_rtc_remove(struct rt_platform_device *pdev)
 {
-    rt_err_t err = RT_EOK;
-    struct goldfish_rtc *grtc = rt_calloc(1, sizeof(*grtc));
+    struct goldfish_rtc *grtc = pdev->parent.user_data;
 
-    if (grtc)
-    {
-        err = goldfish_rtc_ofw_init(pdev, grtc);
-    }
-    else
-    {
-        err = -RT_ENOMEM;
-    }
+    rt_hw_interrupt_mask(grtc->irq);
+    rt_pic_detach_irq(grtc->irq, grtc);
 
-    if (!err)
-    {
-        grtc->parent.type = RT_Device_Class_RTC;
-    #ifdef RT_USING_DEVICE_OPS
-        grtc->parent.ops = &goldfish_rtc_ops;
-    #else
-        grtc->parent.control = goldfish_rtc_control;
-    #endif
+    rt_device_unregister(&grtc->parent);
 
-        rt_device_register(&grtc->parent, "rtc", RT_DEVICE_FLAG_RDWR);
+    rt_iounmap(grtc->base);
 
-        rt_hw_interrupt_install(grtc->irq, goldfish_rtc_isr, grtc, "rtc-goldfish");
-        rt_hw_interrupt_umask(grtc->irq);
-    }
-    else
-    {
-        rt_free(grtc);
-    }
+    rt_free(grtc);
 
-    return err;
+    return RT_EOK;
 }
 
 static const struct rt_ofw_node_id goldfish_rtc_ofw_ids[] =
@@ -260,5 +265,6 @@ static struct rt_platform_driver goldfish_rtc_driver =
     .ids = goldfish_rtc_ofw_ids,
 
     .probe = goldfish_rtc_probe,
+    .remove = goldfish_rtc_remove,
 };
 RT_PLATFORM_DRIVER_EXPORT(goldfish_rtc_driver);

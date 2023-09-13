@@ -13,9 +13,17 @@
 
 int main(int argc, char** argv)
 {
+    const char *oem;
+
+#ifdef RT_USING_SMART
+    oem = "Smart";
+#else
+    oem = "Thread";
+#endif
+
     rt_ubase_t level = rt_hw_interrupt_disable();
 
-    rt_kprintf("Hi, this is RT-Thread!!\n");
+    rt_kprintf("Hi, this is RT-%s!!\n", oem);
 
     rt_hw_interrupt_enable(level);
 

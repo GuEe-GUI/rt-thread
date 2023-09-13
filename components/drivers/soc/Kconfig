@@ -1,0 +1,9 @@
+menuconfig RT_USING_SOC
+    bool "Using SOC (System On Chip) specific Drivers"
+    depends on RT_USING_DM
+    default n
+
+if RT_USING_SOC
+    source "$RTT_DIR/components/drivers/soc/broadcom/Kconfig"
+    source "$RTT_DIR/components/drivers/soc/rockchip/Kconfig"
+endif

@@ -1,0 +1,24 @@
+if RT_USING_DM
+menu "Power Management (PM) Domains device drivers"
+
+config RT_PMDOMAIN_BCM2835
+    bool "BCM2835"
+    select RT_USING_RESET
+    default n
+
+config RT_PMDOMAIN_RASPBERRYPI
+    bool "Raspberrypi"
+    default n
+
+config RT_PMDOMAIN_ROCKCHIP
+    bool "Rockchip"
+    select RT_MFD_SYSCON
+    default n
+
+config RT_PMDOMAIN_SCMI
+    bool "ARM SCMI"
+    select RT_FIRMWARE_ARM_SCMI
+    default n
+
+endmenu
+endif

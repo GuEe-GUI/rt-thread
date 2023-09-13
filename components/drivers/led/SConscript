@@ -1,0 +1,24 @@
+from building import *
+
+group = []
+
+if not GetDepend(['RT_USING_LED']):
+    Return('group')
+
+cwd = GetCurrentDir()
+CPPPATH = [cwd + '/../include']
+
+src = ['led.c']
+
+if GetDepend(['RT_LED_GPIO']):
+    src += ['led-gpio.c']
+
+if GetDepend(['RT_LED_PWM']):
+    src += ['led-pwm.c']
+
+if GetDepend(['RT_LED_SYSCON']):
+    src += ['led-syscon.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
+
+Return('group')

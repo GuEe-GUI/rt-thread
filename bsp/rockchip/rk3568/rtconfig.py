@@ -16,8 +16,7 @@ if os.getenv('RTT_CC'):
 PLATFORM    = 'gcc'
 EXEC_PATH   = r'/opt/gcc-arm-8.3-2019.03-x86_64-aarch64-elf/bin/'
 
-if os.getenv('RTT_EXEC_PATH'):
-    EXEC_PATH = os.getenv('RTT_EXEC_PATH')
+EXEC_PATH   = os.getenv('RTT_EXEC_PATH') or '/usr/bin'
 
 BUILD = 'debug'
 
@@ -26,6 +25,7 @@ if PLATFORM == 'gcc':
     PREFIX  = os.getenv('RTT_CC_PREFIX') or 'aarch64-none-elf-'
     CC      = PREFIX + 'gcc'
     CXX     = PREFIX + 'g++'
+    CPP     = PREFIX + 'cpp'
     AS      = PREFIX + 'gcc'
     AR      = PREFIX + 'ar'
     LINK    = PREFIX + 'gcc'
@@ -34,10 +34,11 @@ if PLATFORM == 'gcc':
     OBJDUMP = PREFIX + 'objdump'
     OBJCPY  = PREFIX + 'objcopy'
 
-    DEVICE = ' -g -march=armv8-a -mtune=cortex-a53'
+    DEVICE = ' -g -march=armv8-a -mtune=cortex-a55 -fdiagnostics-color=always'
+    CPPFLAGS= ' -E -P -x assembler-with-cpp'
     CFLAGS = DEVICE + ' -Wall -Wno-cpp'
     AFLAGS = ' -c' + ' -x assembler-with-cpp -D__ASSEMBLY__'
-    LFLAGS  = DEVICE + ' -nostartfiles -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,system_vectors -T link.lds'
+    LFLAGS  = DEVICE + ' -nostartfiles -Wl,--no-warn-rwx-segments -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,system_vectors -T link.lds'
     CPATH   = ''
     LPATH   = ''
 

@@ -151,7 +151,7 @@ static rt_err_t vq_split_add_buf(struct rt_virtqueue *vq, void *dma_buf, rt_size
     if (!vq->num_free)
     {
         LOG_D("%s.virtqueue[%s(%d)] add buffer.len = %d fail",
-                rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index);
+                rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index);
 
         /* Recvice buffer NOW! */
         if (is_out)
@@ -190,7 +190,7 @@ static rt_err_t vq_split_add_buf(struct rt_virtqueue *vq, void *dma_buf, rt_size
     vq->num_free--;
 
     LOG_D("%s.virtqueue[%s(%d)] add buffer(%p, size = %d) head = %d",
-            rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index, dma_buf, size, head);
+            rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index, dma_buf, size, head);
 
     if (vq->num_added == RT_UINT16_MAX)
     {
@@ -211,7 +211,7 @@ static rt_bool_t vq_split_submit(struct rt_virtqueue *vq)
     head = (head - vq->num_added) % virtq_num;
 
     LOG_D("%s.virtqueue[%s(%d)] submit head = %d, num_added = %d, idx = %d",
-            rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index, head, vq->num_added, virtq->avail->idx + 1);
+            rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index, head, vq->num_added, virtq->avail->idx + 1);
 
     /* Reset list info */
     vq->num_added = 0;
@@ -292,7 +292,7 @@ static void *vq_split_read_buf(struct rt_virtqueue *vq, rt_size_t *out_len)
     if (!vq_split_pending(vq))
     {
         LOG_D("%s.virtqueue[%s(%d)] read buffer empty",
-                rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index);
+                rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index);
 
         return RT_NULL;
     }
@@ -307,7 +307,7 @@ static void *vq_split_read_buf(struct rt_virtqueue *vq, rt_size_t *out_len)
     buf = vq->buffer_hash[idx];
 
     LOG_D("%s.virtqueue[%s(%d)] read head = %d, buffer(%p, size = %d)",
-            rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index, idx, buf, *out_len);
+            rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index, idx, buf, *out_len);
 
     do {
         idx = next;
@@ -507,7 +507,7 @@ void rt_virtqueue_isr(int irq, struct rt_virtqueue *vq)
     if (!virtqueue_pending(vq))
     {
         LOG_D("%s.virtqueue[%s(%d)] no buffer pending in %s",
-                rt_dm_get_dev_name(&vq->vdev->parent), vq->name, vq->index, "isr");
+                rt_dm_dev_get_name(&vq->vdev->parent), vq->name, vq->index, "isr");
 
         return;
     }

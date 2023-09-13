@@ -87,10 +87,6 @@ rt_weak void *rt_ioremap_early(void *paddr, size_t size)
     return paddr;
 }
 
-rt_weak void rt_iounmap_early(void *vaddr, size_t size)
-{
-}
-
 void *rt_ioremap(void *paddr, size_t size)
 {
     return _ioremap_type(paddr, size, MM_AREA_TYPE_PHY);

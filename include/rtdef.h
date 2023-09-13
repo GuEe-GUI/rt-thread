@@ -205,6 +205,7 @@ typedef __gnuc_va_list              va_list;
 #define rt_section(x)               __attribute__((section(x)))
 #define rt_used                     __attribute__((used))
 #define rt_align(n)                 __attribute__((aligned(n)))
+#define rt_packed                   __attribute__((packed))
 #define rt_weak                     __attribute__((weak))
 #define rt_inline                   static __inline
 #define RTT_API
@@ -444,6 +445,12 @@ struct rt_object
 #endif /* RT_USING_SMART */
 
     rt_list_t   list;                                    /**< list node of kernel object */
+#ifdef RT_USING_DFS_DIRECTFS
+    rt_list_t   node;
+    rt_list_t   child_nodes;
+    struct rt_object *parent;
+    void *objectfs;
+#endif /* RT_USING_DFS_DIRECTFS */
 };
 typedef struct rt_object *rt_object_t;                   /**< Type for kernel objects. */
 

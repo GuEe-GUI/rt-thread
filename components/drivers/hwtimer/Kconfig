@@ -1,15 +1,22 @@
 menuconfig RT_USING_HWTIMER
-    bool "Using hardware timer device drivers"
+    bool "Using Hardware Timer device drivers"
     default n
 
 config RT_HWTIMER_ARM_ARCH
     bool "ARM ARCH Timer"
     depends on RT_USING_DM
     depends on RT_USING_HWTIMER
+    depends on ARCH_ARM_CORTEX_A || ARCH_ARMV8
     default n
 
-config RT_HWTIMER_RISCV_CLINT
-    bool "RISC-V CLINT Timer"
+config RT_HWTIMER_BCM2835
+    bool "BCM2835 Timer"
+    depends on RT_USING_DM
+    depends on RT_USING_HWTIMER
+    default n
+
+config RT_HWTIMER_ROCKCHIP
+    bool "RockChip Timer"
     depends on RT_USING_DM
     depends on RT_USING_HWTIMER
     default n

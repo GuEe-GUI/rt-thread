@@ -52,9 +52,13 @@ struct virtio_blk_req
     rt_le32_t ioprio;
     rt_le64_t sector;
 
-#define VIRTIO_BLK_S_OK     0
-#define VIRTIO_BLK_S_IOERR  1
-#define VIRTIO_BLK_S_UNSUPP 2
+#define VIRTIO_BLK_S_OK                     0
+#define VIRTIO_BLK_S_IOERR                  1
+#define VIRTIO_BLK_S_UNSUPP                 2
+#define VIRTIO_BLK_S_ZONE_INVALID_CMD       3
+#define VIRTIO_BLK_S_ZONE_UNALIGNED_WP      4
+#define VIRTIO_BLK_S_ZONE_OPEN_RESOURCE     5
+#define VIRTIO_BLK_S_ZONE_ACTIVE_RESOURCE   6
     /*
      * next:
      * rt_uint8_t data[];
@@ -119,6 +123,6 @@ struct virtio_blk_config
     rt_le32_t max_secure_erase_sectors;
     rt_le32_t max_secure_erase_seg;
     rt_le32_t secure_erase_sector_alignment;
-} __attribute__((packed));
+} rt_packed;
 
 #endif /* __VIRTIO_BLK_H__ */
