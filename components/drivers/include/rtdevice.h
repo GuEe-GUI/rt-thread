@@ -195,6 +195,16 @@ extern "C" {
 #include "drivers/pic.h"
 #endif
 
+#ifdef RT_USING_PCI
+#include "drivers/pci.h"
+#ifdef RT_PCI_MSI
+#include "drivers/pci_msi.h"
+#endif
+#ifdef RT_PCI_ENDPOINT
+#include "drivers/pci_endpoint.h"
+#endif
+#endif
+
 #ifdef RT_USING_VIDEO
 #endif /* RT_USING_VIDEO */
 
