@@ -6,7 +6,7 @@ CPPPATH = [cwd + '/../include']
 group = []
 
 if GetDepend(['RT_USING_DM']):
-    src += ['dm.c', 'bus.c', 'platform.c']
+    src += ['dm.c', 'bus.c', 'platform.c', 'power.c']
 
 src += ['device.c']
 src += ['driver.c']
