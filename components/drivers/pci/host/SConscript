@@ -8,6 +8,12 @@ CPPPATH = [cwd + '/../../include']
 
 src = []
 
+if GetDepend(['RT_PCI_HOST_COMMON']):
+    src += ['pci-host-common.c']
+
+if GetDepend(['RT_PCI_HOST_GENERIC']):
+    src += ['pci-host-generic.c']
+
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 
 for d in list:
