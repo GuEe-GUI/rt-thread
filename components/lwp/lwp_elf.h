@@ -1018,14 +1018,14 @@ typedef struct
 /* Note section contents.  Each entry in the note section begins with
    a header of a fixed form.  */
 
-typedef struct
+typedef struct elf32_note
 {
   Elf32_Word n_namesz;			/* Length of the note's name.  */
   Elf32_Word n_descsz;			/* Length of the note's descriptor.  */
   Elf32_Word n_type;			/* Type of the note.  */
 } Elf32_Nhdr;
 
-typedef struct
+typedef struct elf64_note
 {
   Elf64_Word n_namesz;			/* Length of the note's name.  */
   Elf64_Word n_descsz;			/* Length of the note's descriptor.  */
