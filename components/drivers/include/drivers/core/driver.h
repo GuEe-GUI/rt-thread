@@ -13,20 +13,14 @@
 
 #include <drivers/core/device.h>
 
-typedef struct rt_driver *rt_driver_t;
-
-/* driver object ptr structure */
-struct rt_drv_object
-{
-    struct rt_driver *drv;
-};
-
 struct rt_driver
 {
-    /*new params*/
-    struct rt_bus *bus;
+    struct rt_object parent;
+
     rt_list_t node;
-    /*new params*/
+    struct rt_bus *bus;
+
+    rt_uint32_t ref_count;
 
 #ifdef RT_USING_DEVICE_OPS
     const struct rt_device_ops *dev_ops;
@@ -40,23 +34,23 @@ struct rt_driver
     rt_err_t  (*control)(rt_device_t dev, int cmd, void *args);
 #endif
     const struct filesystem_ops *fops;
-    const char *name;
-    enum rt_device_class_type dev_type;
-    int device_size;
-    int flag;
-    const struct rt_device_id *ids;
+
     int (*probe)(struct rt_device *dev);
-    int (*probe_init)(struct rt_device *dev);
     int (*remove)(struct rt_device *dev);
-    const void *ops;    /* driver-specific operations */
-    void *drv_priv_data;
-    void *priv;
+    int (*shutdown)(struct rt_device *dev);
 };
 
 int rt_driver_probe_device(struct rt_driver *drv, struct rt_device *dev);
-void rt_system_drivers_init(void);
 
 rt_err_t rt_driver_register(rt_driver_t drv);
-rt_err_t rt_device_bind_with_driver(struct rt_device *device, struct rt_driver *driver);
+rt_err_t rt_driver_unregister(rt_driver_t drv);
+
+#define RT_DRIVER_EXPORT(driver, bus_name, mode)    \
+static int ___##driver##_register(void)             \
+{                                                   \
+    rt_##bus_name##_driver_register(&driver);       \
+    return 0;                                       \
+}                                                   \
+INIT_DEVICE_EXPORT(___##driver##_register);         \
 
 #endif /* __DRIVER_H__ */

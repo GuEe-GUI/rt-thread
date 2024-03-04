@@ -12,46 +12,49 @@
 #define __BUS_H__
 
 #include <rthw.h>
+#include <rtatomic.h>
 #include <drivers/core/device.h>
 #include <drivers/core/driver.h>
-#include <drivers/core/rtdm.h>
-
-#ifdef RT_USING_FDT
-#include <dtb_node.h>
-#endif
 
 typedef struct rt_bus *rt_bus_t; 
 
 struct rt_bus
 {
-    struct rt_object          parent;                   /**< inherit from rt_object */
+    struct rt_object parent;    /**< inherit from rt_object */
+#ifdef RT_USING_DFS_DIRECTFS
+    struct rt_object dev_dir;
+    struct rt_object drv_dir;
+#endif
 
-    char *name;
-    struct rt_bus *bus;
+    const char *name;
 
     rt_list_t list;
-    rt_list_t children;
     rt_list_t dev_list;
     rt_list_t drv_list;
 
-    struct rt_spinlock spinlock;
+    struct rt_spinlock dev_lock;
+    struct rt_spinlock drv_lock;
 
-    rt_bool_t (*match) (rt_driver_t drv, rt_device_t dev);
-    rt_err_t (*probe) ();
+    rt_bool_t (*match)(rt_driver_t drv, rt_device_t dev);
+    rt_err_t  (*probe)(rt_device_t dev);
+    rt_err_t  (*remove)(rt_device_t dev);
+    rt_err_t  (*shutdown)(rt_device_t dev);
 };
 
-struct rt_bus rt_bus_get_root(void);
+rt_err_t rt_bus_for_each_dev(rt_bus_t bus, void *data, int (*fn)(rt_device_t dev, void *));
+rt_err_t rt_bus_for_each_drv(rt_bus_t bus, void *data, int (*fn)(rt_driver_t drv, void *));
 
-rt_err_t rt_bus_init();
-rt_err_t rt_bus_register(struct rt_bus *bus);
+rt_err_t rt_bus_add(rt_bus_t bus);
+rt_err_t rt_bus_add_driver(rt_bus_t bus, rt_driver_t drv);
+rt_err_t rt_bus_add_device(rt_bus_t bus, rt_device_t dev);
+rt_err_t rt_bus_remove_driver(rt_driver_t drv);
+rt_err_t rt_bus_remove_device(rt_device_t dev);
 
-rt_err_t rt_bus_add(struct rt_bus *bus_node);
-rt_err_t rt_bus_add_driver(struct rt_bus *bus, struct rt_driver *drv);
-rt_err_t rt_bus_add_device(struct rt_bus *bus, struct rt_device *dev);
-rt_err_t rt_bus_remove_driver(struct rt_driver *drv);
-rt_err_t rt_bus_remove_device(struct rt_device *dev);
+rt_err_t rt_bus_shutdown(void);
 
-rt_bus_t rt_bus_find_by_name(char *name);
-rt_err_t rt_bus_reload_driver_device(struct rt_bus *new_bus, struct rt_device *dev);
+rt_bus_t rt_bus_find_by_name(const char *name);
+rt_err_t rt_bus_reload_driver_device(rt_bus_t new_bus, rt_device_t dev);
+
+rt_err_t rt_bus_register(rt_bus_t bus);
 
 #endif /* __BUS_H__ */

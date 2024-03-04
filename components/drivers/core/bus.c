@@ -5,56 +5,33 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2023-04-12     ErikChan      the first version
+ * 2023-04-12     ErikChan     the first version
+ * 2023-12-12     GuEe-GUI     make spinlock less
  */
 
 #include <rtthread.h>
 #include <drivers/core/bus.h>
 
-/*init the root bus*/
-static struct rt_bus bus_root =
-{
-        .name = "root",
-        .bus = NULL,
-        .children = RT_LIST_OBJECT_INIT(bus_root.children),
-};
+#define DBG_TAG "bus"
+#define DBG_LVL DBG_INFO
+#include <rtdbg.h>
 
-/**
- * @brief This function get the root bus
- */
-struct rt_bus rt_bus_get_root(void)
+#if defined(RT_USING_DFS) && defined(RT_USING_DFS_DIRECTFS)
+#include <dfs_fs.h>
+#include <dfs_directfs.h>
+#endif
+
+static struct rt_spinlock bus_lock = {};
+static rt_list_t bus_nodes = RT_LIST_OBJECT_INIT(bus_nodes);
+
+rt_inline void spin_lock(struct rt_spinlock *spinlock)
 {
-    return bus_root;
+    rt_hw_spin_lock(&spinlock->lock);
 }
 
-/**
- *  @brief This function match the device and driver, probe them if match successed
- *
- *  @param drv the drv to match/probe
- *
- *  @param dev the dev to match/probe
- *
- *  @return the result of probe, 1 on added successfully.
- */
-static int rt_bus_probe(struct rt_driver *drv, struct rt_device *dev)
+rt_inline void spin_unlock(struct rt_spinlock *spinlock)
 {
-    int ret = 0;
-    
-    struct rt_bus *bus = drv->bus;
-
-    if(!bus)
-    {
-        bus = dev->bus;
-    }
-
-    RT_ASSERT(bus != RT_NULL);
-
-    if (bus->match(drv, dev))
-    {
-        ret = rt_driver_probe_device(drv, dev);
-    }
-
-    return ret;
+    rt_hw_spin_unlock(&spinlock->lock);
 }
 
 /**
@@ -62,29 +39,43 @@ static int rt_bus_probe(struct rt_driver *drv, struct rt_device *dev)
  *
  *  @param bus the target bus
  *
- *  @param drv the target drv to be matched
+ *  @param data the data push when call fn
  *
  *  @param fn  the function callback in each loop
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_for_each_dev(struct rt_bus *bus, struct rt_driver *drv,
-                             int (*fn)(struct rt_driver *drv, struct rt_device *dev))
+rt_err_t rt_bus_for_each_dev(rt_bus_t bus, void *data, int (*fn)(rt_device_t dev, void *))
 {
-    struct rt_device *dev;
-    rt_base_t lever;
+    rt_device_t dev;
+    rt_err_t err = -RT_EEMPTY;
+    rt_list_t *dev_list;
+    struct rt_spinlock *dev_lock;
 
     RT_ASSERT(bus != RT_NULL);
-    RT_ASSERT(drv != RT_NULL);
 
-    lever = rt_spin_lock_irqsave(&bus->spinlock);
-    rt_list_for_each_entry(dev, &(bus->dev_list), node)
+    dev_list = &bus->dev_list;
+    dev_lock = &bus->dev_lock;
+
+    spin_lock(dev_lock);
+    dev = rt_list_entry(dev_list->next, struct rt_device, node);
+    spin_unlock(dev_lock);
+
+    while (&dev->node != dev_list)
     {
-        fn(drv, dev);
+        if (!fn(dev, data))
+        {
+            err = RT_EOK;
+
+            break;
+        }
+
+        spin_lock(dev_lock);
+        dev = rt_list_entry(dev->node.next, struct rt_device, node);
+        spin_unlock(dev_lock);
     }
-    rt_spin_unlock_irqrestore(&bus->spinlock, lever);
-    
-    return RT_EOK;
+
+    return err;
 }
 
 /**
@@ -92,92 +83,97 @@ rt_err_t rt_bus_for_each_dev(struct rt_bus *bus, struct rt_driver *drv,
  *
  *  @param bus the target bus
  *
- *  @param dev the target dev to be matched
+ *  @param data the data push when call fn
  *
  *  @param fn  the function callback in each loop
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_for_each_drv(struct rt_bus *bus, struct rt_device *dev,
-                                int (*fn)(struct rt_driver *drv, struct rt_device *dev))
+rt_err_t rt_bus_for_each_drv(rt_bus_t bus, void *data, int (*fn)(rt_driver_t drv, void *))
 {
-    struct rt_driver *drv;
-    rt_base_t lever;
+    rt_driver_t drv;
+    rt_err_t err = -RT_EEMPTY;
+    rt_list_t *drv_list;
+    struct rt_spinlock *drv_lock;
 
     RT_ASSERT(bus != RT_NULL);
-    RT_ASSERT(dev != RT_NULL);
 
-    if (!rt_list_len(&(bus->drv_list)))
+    drv_list = &bus->drv_list;
+    drv_lock = &bus->drv_lock;
+
+    spin_lock(drv_lock);
+    drv = rt_list_entry(drv_list->next, struct rt_driver, node);
+    spin_unlock(drv_lock);
+
+    while (&drv->node != drv_list)
     {
-        return RT_EOK;
+        if (!fn(drv, data))
+        {
+            err = RT_EOK;
+
+            break;
+        }
+
+        spin_lock(drv_lock);
+        drv = rt_list_entry(drv->node.next, struct rt_driver, node);
+        spin_unlock(drv_lock);
     }
 
-    lever = rt_spin_lock_irqsave(&bus->spinlock);
-    rt_list_for_each_entry(drv, &(bus->drv_list), node)
+    return err;
+}
+
+static rt_err_t bus_probe(rt_driver_t drv, rt_device_t dev)
+{
+    rt_bus_t bus = drv->bus;
+    rt_err_t err = -RT_EEMPTY;
+
+    if (!bus)
     {
-        if (fn(drv, dev))
+        bus = dev->bus;
+    }
+
+    if (!dev->drv && bus->match(drv, dev))
+    {
+        dev->drv = drv;
+
+        err = bus->probe(dev);
+
+        if (err)
         {
-            return RT_EOK;
+            dev->drv = RT_NULL;
         }
     }
-    rt_spin_unlock_irqrestore(&bus->spinlock, lever);
 
-    return RT_ERROR;
+    return err;
 }
 
-/**
- *  @brief This function transfer dev_list and drv_list to the other bus
- *
- *  @param new_bus the bus to transfer
- *
- *  @param dev the target device
- *
- *  @return the error code, RT_EOK on added successfully.
- */
-rt_err_t rt_bus_reload_driver_device(struct rt_bus *new_bus, struct rt_device *dev)
+static int bus_probe_driver(rt_device_t dev, void *drv_ptr)
 {
-    rt_base_t lever;
+    bus_probe(drv_ptr, dev);
 
-    RT_ASSERT(new_bus != RT_NULL);
-    RT_ASSERT(dev != RT_NULL);
-
-    lever = rt_spin_lock_irqsave(&new_bus->spinlock);
-
-    rt_list_remove(&(dev->node));
-    rt_list_insert_after(&(new_bus->dev_list), &(dev->node));
-
-#ifdef RT_USING_DM
-    rt_list_remove(&(dev->drv->node));
-    rt_list_insert_after(&(new_bus->drv_list), &(dev->drv->node));
-#endif
-
-    rt_spin_unlock_irqrestore(&new_bus->spinlock, lever);
-
-    return RT_EOK;
+    /*
+     * The driver is shared by multiple devices,
+     * so we always return the '1' to enumerate all devices.
+     */
+    return 1;
 }
 
-/**
- *  @brief This function add a bus to the root
- *
- *  @param bus_node the bus to be added
- *
- *  @return the error code, RT_EOK on added successfully.
- */
-rt_err_t rt_bus_add(struct rt_bus *bus_node)
+static int bus_probe_device(rt_driver_t drv, void *dev_ptr)
 {
-    rt_base_t lever;
+    rt_err_t err;
 
-    RT_ASSERT(bus_node != RT_NULL);
+    err = bus_probe(drv, dev_ptr);
 
-    bus_node->bus = &bus_root;
+    if (!err)
+    {
+        rt_bus_t bus = drv->bus;
 
-    rt_list_init(&bus_node->list);
+        spin_lock(&bus->drv_lock);
+        ++drv->ref_count;
+        spin_unlock(&bus->drv_lock);
+    }
 
-    lever = rt_spin_lock_irqsave(&bus_node->spinlock);
-    rt_list_insert_after(&bus_root.children, &bus_node->list);
-    rt_spin_unlock_irqrestore(&bus_node->spinlock, lever);
-
-    return RT_EOK;
+    return err;
 }
 
 /**
@@ -189,42 +185,23 @@ rt_err_t rt_bus_add(struct rt_bus *bus_node)
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_add_driver(struct rt_bus *bus, struct rt_driver *drv)
+rt_err_t rt_bus_add_driver(rt_bus_t bus, rt_driver_t drv)
 {
-    struct dtb_node *device_root_node;
-    const struct rt_device_id *id;
-
-    rt_base_t lever;
-
     RT_ASSERT(bus != RT_NULL);
     RT_ASSERT(drv != RT_NULL);
 
-    id = drv->ids;
-    device_root_node = get_dtb_node_head();
-
-    /* loop the compatibles and decide which bus to depend*/
-    while (id->compatible)
-    {
-        const char *compatible = id->compatible;
-        struct dtb_node *dt_node = dtb_node_find_compatible_node(device_root_node, compatible);
-
-        /* add driver to amba bus if compatible satisfied with `arm,primecell` */
-        if (dtb_node_get_dtb_node_compatible_match(dt_node, "arm,primecell"))
-        {
-            bus = rt_bus_find_by_name("amba");
-            break;
-        }
-
-        id++;
-    }
-
     drv->bus = bus;
+    rt_list_init(&drv->node);
 
-    lever = rt_spin_lock_irqsave(&bus->spinlock);
-    rt_list_insert_after(&(bus->drv_list), &(drv->node));
-    rt_spin_unlock_irqrestore(&bus->spinlock, lever);
+    spin_lock(&bus->drv_lock);
+    rt_list_insert_before(&bus->drv_list, &drv->node);
+    spin_unlock(&bus->drv_lock);
 
-    rt_bus_for_each_dev(drv->bus, drv, rt_bus_probe);
+#ifdef RT_USING_DFS_DIRECTFS
+    dfs_directfs_create_link(&bus->drv_dir, &drv->parent, drv->parent.name);
+#endif
+
+    rt_bus_for_each_dev(bus, drv, bus_probe_driver);
 
     return RT_EOK;
 }
@@ -238,20 +215,23 @@ rt_err_t rt_bus_add_driver(struct rt_bus *bus, struct rt_driver *drv)
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_add_device(struct rt_bus *bus, struct rt_device *dev)
+rt_err_t rt_bus_add_device(rt_bus_t bus, rt_device_t dev)
 {
-    rt_base_t lever;
-
     RT_ASSERT(bus != RT_NULL);
     RT_ASSERT(dev != RT_NULL);
 
     dev->bus = bus;
+    rt_list_init(&dev->node);
 
-    lever = rt_spin_lock_irqsave(&bus->spinlock);
-    rt_list_insert_before(&(bus->dev_list), &(dev->node));
-    rt_spin_unlock_irqrestore(&bus->spinlock, lever);
+    spin_lock(&bus->dev_lock);
+    rt_list_insert_before(&bus->dev_list, &dev->node);
+    spin_unlock(&bus->dev_lock);
+
+#ifdef RT_USING_DFS_DIRECTFS
+    dfs_directfs_create_link(&bus->dev_dir, &dev->parent, dev->parent.name);
+#endif
     
-    rt_bus_for_each_drv(dev->bus, dev, rt_bus_probe);
+    rt_bus_for_each_drv(bus, dev, bus_probe_device);
 
     return RT_EOK;
 }
@@ -263,14 +243,33 @@ rt_err_t rt_bus_add_device(struct rt_bus *bus, struct rt_device *dev)
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_remove_driver(struct rt_driver *drv)
+rt_err_t rt_bus_remove_driver(rt_driver_t drv)
 {
+    rt_err_t err;
+    rt_bus_t bus;
+
+    RT_ASSERT(drv != RT_NULL);
     RT_ASSERT(drv->bus != RT_NULL);
 
-    rt_kprintf("bus: '%s': remove driver %s\n", drv->bus->name, drv->name);
-    rt_list_remove(&(drv->node));
+    bus = drv->bus;
 
-    return RT_EOK;
+    LOG_D("Bus(%s) remove driver %s", bus->name, drv->parent.name);
+
+    spin_lock(&bus->drv_lock);
+
+    if (drv->ref_count)
+    {
+        err = -RT_EBUSY;
+    }
+    else
+    {
+        rt_list_remove(&drv->node);
+        err = RT_EOK;
+    }
+
+    spin_unlock(&bus->drv_lock);
+
+    return err;
 }
 
 /**
@@ -280,14 +279,106 @@ rt_err_t rt_bus_remove_driver(struct rt_driver *drv)
  *
  *  @return the error code, RT_EOK on added successfully.
  */
-rt_err_t rt_bus_remove_device(struct rt_device *dev)
+rt_err_t rt_bus_remove_device(rt_device_t dev)
 {
+    rt_bus_t bus;
+    rt_driver_t drv;
+    rt_err_t err = RT_EOK;
+
+    RT_ASSERT(dev != RT_NULL);
     RT_ASSERT(dev->bus != RT_NULL);
 
-    rt_kprintf("bus: '%s': remove device %s\n", dev->bus->name, dev->name);
-    rt_list_remove(&(dev->node));
+    bus = dev->bus;
+    drv = dev->drv;
 
-    return RT_EOK;
+    LOG_D("Bus(%s) remove device %s", bus->name, dev->parent.name);
+
+    spin_lock(&bus->dev_lock);
+    rt_list_remove(&dev->node);
+    spin_unlock(&bus->dev_lock);
+
+    if (dev->bus->remove)
+    {
+        err = dev->bus->remove(dev);
+    }
+    else if (drv)
+    {
+        if (drv->remove)
+        {
+            err = drv->remove(dev);
+        }
+
+        /* device and driver are in the same bus */
+        spin_lock(&bus->drv_lock);
+        --drv->ref_count;
+        spin_unlock(&bus->drv_lock);
+    }
+
+    return err;
+}
+
+struct bus_shutdown_info
+{
+    rt_bus_t bus;
+
+    rt_err_t err;
+};
+
+static int device_shutdown(rt_device_t dev, void *info_ptr)
+{
+    rt_bus_t bus;
+    rt_err_t err = RT_EOK;
+    struct bus_shutdown_info *info = info_ptr;
+
+    bus = info->bus;
+
+    if (bus->shutdown)
+    {
+        LOG_D("Device(%s) shutdown", dev->parent.name);
+        err = bus->shutdown(dev);
+        LOG_D("  Result: %s", rt_strerror(err));
+    }
+    else if (dev->drv && dev->drv->shutdown)
+    {
+        LOG_D("Device(%s) shutdown", dev->parent.name);
+        err = dev->drv->shutdown(dev);
+        LOG_D("  Result: %s", rt_strerror(err));
+    }
+
+    if (err)
+    {
+        /* Only get the last one while system not crash */
+        info->err = err;
+    }
+
+    /* Go on, we want to ask all devices to shutdown */
+    return 1;
+}
+
+/**
+ *  @brief This function call all buses' shutdown
+ *
+ *  @return the error code, RT_EOK on shutdown successfully.
+ */
+rt_err_t rt_bus_shutdown(void)
+{
+    rt_bus_t bus = RT_NULL;
+    struct bus_shutdown_info info =
+    {
+        .err = RT_EOK,
+    };
+
+    spin_lock(&bus_lock);
+
+    rt_list_for_each_entry(bus, &bus_nodes, list)
+    {
+        info.bus = bus;
+        rt_bus_for_each_dev(bus, &info, device_shutdown);
+    }
+
+    spin_unlock(&bus_lock);
+
+    return info.err;
 }
 
 /**
@@ -296,24 +387,52 @@ rt_err_t rt_bus_remove_device(struct rt_device *dev)
  *
  *  @return the bus finded by name.
  */
-rt_bus_t rt_bus_find_by_name(char *name)
+rt_bus_t rt_bus_find_by_name(const char *name)
 {
-    struct rt_bus *bus = RT_NULL;
-    struct rt_list_node *node = RT_NULL;
+    rt_bus_t bus = RT_NULL;
 
-    if (!rt_list_isempty(&bus_root.children))
+    RT_ASSERT(name != RT_NULL);
+
+    spin_lock(&bus_lock);
+
+    rt_list_for_each_entry(bus, &bus_nodes, list)
     {
-        rt_list_for_each(node, &bus_root.children)
+        if (!rt_strncmp(bus->name, name, RT_NAME_MAX))
         {
-            bus = rt_list_entry(node, struct rt_bus, list);
-            if (rt_strncmp(bus->name, name, RT_NAME_MAX) == 0)
-            {
-                return bus;
-            }
+            break;
         }
     }
 
+    spin_unlock(&bus_lock);
+
     return bus;
+}
+
+/**
+ *  @brief This function transfer dev_list and drv_list to the other bus
+ *
+ *  @param new_bus the bus to transfer
+ *
+ *  @param dev the target device
+ *
+ *  @return the error code, RT_EOK on added successfully.
+ */
+rt_err_t rt_bus_reload_driver_device(rt_bus_t new_bus, rt_device_t dev)
+{
+    rt_bus_t old_bus;
+
+    RT_ASSERT(new_bus != RT_NULL);
+    RT_ASSERT(dev != RT_NULL);
+    RT_ASSERT(dev->bus != RT_NULL);
+    RT_ASSERT(dev->bus != new_bus);
+
+    old_bus = dev->bus;
+
+    spin_lock(&old_bus->dev_lock);
+    rt_list_remove(&dev->node);
+    spin_unlock(&old_bus->dev_lock);
+
+    return rt_bus_add_device(new_bus, dev);
 }
 
 /**
@@ -322,12 +441,39 @@ rt_bus_t rt_bus_find_by_name(char *name)
  *
  *  @return the error code, RT_EOK on registeration successfully.
  */
-rt_err_t rt_bus_register(struct rt_bus *bus)
+rt_err_t rt_bus_register(rt_bus_t bus)
 {
-    rt_list_init(&(bus->children));
-    rt_list_init(&(bus->dev_list));
-    rt_list_init(&(bus->drv_list));
-    rt_bus_add(bus);
+    RT_ASSERT(bus != RT_NULL);
+
+    rt_list_init(&bus->list);
+    rt_list_init(&bus->dev_list);
+    rt_list_init(&bus->drv_list);
+
+    rt_spin_lock_init(&bus->dev_lock);
+    rt_spin_lock_init(&bus->drv_lock);
+
+    spin_lock(&bus_lock);
+
+    rt_list_insert_before(&bus_nodes, &bus->list);
+
+#ifdef RT_USING_DFS_DIRECTFS
+    do {
+        static rt_object_t bus_obj = RT_NULL;
+
+        if (!bus_obj)
+        {
+            bus_obj = dfs_directfs_find_object(RT_NULL, "bus");
+
+            RT_ASSERT(bus_obj != RT_NULL);
+        }
+
+        dfs_directfs_create_link(bus_obj, &bus->parent, bus->name);
+        dfs_directfs_create_link(&bus->parent, &bus->dev_dir, "devices");
+        dfs_directfs_create_link(&bus->parent, &bus->drv_dir, "drivers");
+    } while (0);
+#endif
+
+    spin_unlock(&bus_lock);
+
     return RT_EOK;
 }
-

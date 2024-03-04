@@ -11,13 +11,10 @@
 #ifndef __DEVICE_H__
 #define __DEVICE_H__
 
-typedef struct rt_device *rt_device_t;
+#include <rtdef.h>
 
-struct rt_device_id
-{
-    const char *compatible;
-    void *data;
-};
+typedef struct rt_driver *rt_driver_t;
+typedef struct rt_device *rt_device_t;
 
 /**
  * Notify structure
@@ -34,14 +31,13 @@ struct rt_device_notify
 struct rt_device
 {
     struct rt_object          parent;                   /**< inherit from rt_object */
-    char *name;
+
     rt_list_t node;
     struct rt_bus *bus;
-    void   *priv;
 
 #ifdef RT_USING_DM
-    struct rt_driver *drv;
-    void *dtb_node;
+    rt_driver_t drv;
+    void *ofw_node;
 #endif
     enum rt_device_class_type type;                     /**< device type */
     rt_uint16_t               flag;                     /**< device flag */
