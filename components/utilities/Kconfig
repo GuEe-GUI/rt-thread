@@ -216,6 +216,7 @@ config RT_USING_VAR_EXPORT
     bool "Enable Var Export"
     default n
 
+source "$RTT_DIR/components/utilities/crash_core/Kconfig"
 source "$RTT_DIR/components/utilities/libadt/Kconfig"
 source "$RTT_DIR/components/utilities/rt-link/Kconfig"
 
