@@ -106,6 +106,12 @@ if RT_USING_DFS_V1
         bool "Using devfs for device objects"
         default y
 
+    config RT_USING_DFS_DIRECTFS
+        bool "Enable filesystem for direct access rt_object"
+        select RT_USING_ADT_REF
+        depends on RT_USING_MEMHEAP
+        default n
+
     config RT_USING_DFS_ROMFS
         bool "Enable ReadOnly file system on flash"
         default n

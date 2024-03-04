@@ -444,6 +444,12 @@ struct rt_object
 #endif /* RT_USING_SMART */
 
     rt_list_t   list;                                    /**< list node of kernel object */
+#ifdef RT_USING_DFS_DIRECTFS
+    rt_list_t   node;
+    rt_list_t   child_nodes;
+    struct rt_object *parent;
+    void *objectfs;
+#endif /* RT_USING_DFS_DIRECTFS */
 };
 typedef struct rt_object *rt_object_t;                   /**< Type for kernel objects. */
 
