@@ -174,6 +174,9 @@ extern "C" {
 #include "drivers/platform.h"
 
 #ifdef RT_USING_FIRMWARE
+#ifdef RT_FIRMWARE_PSCI
+#include "drivers/psci.h"
+#endif
 #endif /* RT_USING_FIRMWARE */
 
 #ifdef RT_USING_OFW
