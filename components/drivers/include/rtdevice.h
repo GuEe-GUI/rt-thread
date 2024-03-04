@@ -191,6 +191,9 @@ extern "C" {
 #include "drivers/pic.h"
 #endif
 
+#ifdef RT_USING_VIDEO
+#endif /* RT_USING_VIDEO */
+
 #endif /* RT_USING_DM */
 #ifdef __cplusplus
 }

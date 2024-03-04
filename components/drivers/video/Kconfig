@@ -1,0 +1,8 @@
+config RT_USING_LCD
+    bool "Using LCD graphic drivers" if !RT_USING_DM
+    default n
+
+menuconfig RT_USING_VIDEO
+    bool "Using Video Graphics device drivers"
+    default n
+
