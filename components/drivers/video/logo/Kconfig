@@ -1,0 +1,52 @@
+menuconfig RT_VIDEO_LOGO
+    bool "Startup Logo"
+    depends on RT_USING_VIDEO
+    default y
+
+config RT_VIDEO_LOGO_FBDEV
+    string "framebuffer device"
+    default "fb0"
+
+choice
+    prompt "Rendering stage"
+    default RT_VIDEO_LOGO_RENDERING_STAGE_DRIVER_EARLY
+    depends on RT_VIDEO_LOGO
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_DRIVER_EARLY
+        bool "Device driver early"
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_DRIVER
+        bool "Device driver"
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_DRIVER_LATER
+        bool "Device driver later"
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_COMPONENT
+        bool "Components"
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_ENV
+        bool "Environment"
+
+    config RT_VIDEO_LOGO_RENDERING_STAGE_APP
+        bool "Application"
+endchoice
+
+choice
+    prompt "Rendering image(ppm)"
+    default RT_VIDEO_LOGO_RT_THREAD_CLUT224
+    depends on RT_VIDEO_LOGO
+
+    config RT_VIDEO_LOGO_RT_THREAD_CLUT224
+        bool "Standard 224-color RT-Thread logo"
+
+    config RT_VIDEO_LOGO_RT_THREAD_WHITE_CLUT224
+        bool "Standard 224-color RT-Thread white logo"
+
+    config RT_VIDEO_LOGO_BSP
+        bool "BSP customized logo"
+endchoice
+
+config RT_VIDEO_LOGO_BSP_PATH
+    string "Rendering image(ppm) BSP customized logo path"
+    depends on RT_VIDEO_LOGO_BSP
+    default "logo_bsp.ppm"

@@ -6,3 +6,6 @@ menuconfig RT_USING_VIDEO
     bool "Using Video Graphics device drivers"
     default n
 
+if RT_USING_VIDEO
+source "$RTT_DIR/components/drivers/video/logo/Kconfig"
+endif
