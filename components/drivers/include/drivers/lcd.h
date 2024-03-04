@@ -11,6 +11,8 @@
 #ifndef RT_LCD_H__
 #define RT_LCD_H__
 
+#include <stdint.h>
+
 /* ioctls
    0x46 is 'F'                                                          */
 
@@ -106,6 +108,25 @@ struct fb_fix_screeninfo
     /*  specific chip/card we have  */
     uint16_t capabilities;     /* see FB_CAP_* */
     uint16_t reserved[2];      /* Reserved for future compatibility */
+};
+
+struct fb_info
+{
+    int node;
+    int flags;
+    struct fb_var_screeninfo var;   /* Current var */
+    struct fb_fix_screeninfo fix;   /* Current fix */
+
+    char *screen_base;              /* Virtual address */
+    unsigned long screen_size;      /* Amount of ioremapped VRAM or 0 */
+    void *pseudo_palette;           /* Fake palette of 16 colors */
+#define FBINFO_STATE_RUNNING    0
+#define FBINFO_STATE_SUSPENDED  1
+    uint32_t state;                 /* Hardware state i.e suspend */
+    void *fbcon_par;                /* fbcon use-only private area */
+
+    /* From here on everything is device dependent */
+    void *par;
 };
 
 #endif
