@@ -2,3 +2,9 @@ menuconfig RT_USING_PIN
     bool "Using Generic GPIO device drivers"
     default y
 
+config RT_PIN_PL061
+    bool "ARM PL061"
+    depends on RT_USING_DM
+    depends on RT_USING_PIN
+    default n
+
