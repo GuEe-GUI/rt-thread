@@ -1,0 +1,14 @@
+menuconfig RT_USING_RTC
+    bool "Using Real Time Clock (RTC) device drivers"
+    default n
+
+    if RT_USING_RTC
+        config RT_USING_ALARM
+            bool "Using RTC alarm"
+            default n
+
+        config RT_USING_SOFT_RTC
+            bool "Using software simulation RTC device"
+            default n
+    endif
+
