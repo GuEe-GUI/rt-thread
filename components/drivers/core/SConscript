@@ -8,8 +8,8 @@ group = []
 if GetDepend(['RT_USING_DM']):
     src += ['dm.c', 'bus.c', 'platform.c', 'power.c', 'power_domain.c']
 
-src += ['device.c']
-src += ['driver.c']
+if GetDepend(['RT_USING_OFW']):
+    src += ['platform_ofw.c']
 
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 
