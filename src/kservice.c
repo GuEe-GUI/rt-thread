@@ -1565,8 +1565,9 @@ rt_device_t rt_console_set_device(const char *name)
         else
         {
             console_register("console", new_iodev);
-            _console_device = rt_device_find("console");
-            rt_device_open(_console_device, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_STREAM);
+            new_iodev = rt_device_find("console");
+            rt_device_open(new_iodev, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_STREAM);
+            _console_device = new_iodev;
         }
     }
 
