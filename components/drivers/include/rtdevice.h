@@ -165,6 +165,7 @@ extern "C" {
 #include "drivers/lcd.h"
 #endif
 
+#include "drivers/core/bus.h"
 
 #ifdef RT_USING_OFW
 #include "drivers/ofw.h"
