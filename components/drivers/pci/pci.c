@@ -19,6 +19,16 @@
 #include <drivers/misc.h>
 #include <drivers/core/bus.h>
 
+rt_inline void spin_lock(struct rt_spinlock *spinlock)
+{
+    rt_hw_spin_lock(&spinlock->lock);
+}
+
+rt_inline void spin_unlock(struct rt_spinlock *spinlock)
+{
+    rt_hw_spin_unlock(&spinlock->lock);
+}
+
 rt_uint32_t rt_pci_domain(struct rt_pci_device *pdev)
 {
     struct rt_pci_host_bridge *host_bridge;
@@ -150,6 +160,67 @@ rt_uint8_t rt_pci_find_next_capability(struct rt_pci_device *pdev, rt_uint8_t po
     }
 
     return res;
+}
+
+rt_uint16_t rt_pci_find_ext_capability(struct rt_pci_device *pdev, int cap)
+{
+    return rt_pci_find_ext_next_capability(pdev, 0, cap);
+}
+
+rt_uint16_t rt_pci_find_ext_next_capability(struct rt_pci_device *pdev, rt_uint16_t pos, int cap)
+{
+    int ttl;
+    rt_uint32_t header;
+    rt_uint16_t start = pos;
+
+    /* minimum 8 bytes per capability */
+    ttl = ((PCIE_REGMAX + 1) - (PCI_REGMAX + 1)) / 8;
+
+    if (pdev->cfg_size <= PCI_REGMAX + 1)
+    {
+        return 0;
+    }
+
+    if (!pos)
+    {
+        pos = PCI_REGMAX + 1;
+    }
+
+    if (rt_pci_read_config_u32(pdev, pos, &header))
+    {
+        return 0;
+    }
+
+    /*
+     * If we have no capabilities, this is indicated by cap ID,
+     * cap version and next pointer all being 0.
+     */
+    if (header == 0)
+    {
+        return 0;
+    }
+
+    while (ttl-- > 0)
+    {
+        if (PCI_EXTCAP_ID(header) == cap && pos != start)
+        {
+            return pos;
+        }
+
+        pos = PCI_EXTCAP_NEXTPTR(header);
+
+        if (pos < PCI_REGMAX + 1)
+        {
+            break;
+        }
+
+        if (rt_pci_read_config_u32(pdev, pos, &header))
+        {
+            break;
+        }
+    }
+
+    return 0;
 }
 
 static void pci_set_master(struct rt_pci_device *pdev, rt_bool_t enable)
@@ -390,8 +461,8 @@ rt_err_t rt_pci_region_setup(struct rt_pci_host_bridge *host_bridge)
 
         LOG_I("Bus %s region(%d):",
             region->flags == PCI_BUS_REGION_F_MEM ? "Memory" :
-                    (region->flags & PCI_BUS_REGION_F_PREFETCH ? "Prefetchable Mem" :
-                            (region->flags & PCI_BUS_REGION_F_IO ? "I/O" : "Unknown")), i);
+                    (region->flags == PCI_BUS_REGION_F_PREFETCH ? "Prefetchable Mem" :
+                            (region->flags == PCI_BUS_REGION_F_IO ? "I/O" : "Unknown")), i);
         LOG_I("  cpu:      [%p, %p]", region->cpu_addr, (region->cpu_addr + region->size - 1));
         LOG_I("  physical: [%p, %p]", region->phy_addr, (region->phy_addr + region->size - 1));
     }
@@ -443,6 +514,12 @@ struct rt_pci_bus_region *rt_pci_region_alloc(struct rt_pci_host_bridge *host_br
 
             break;
         }
+    }
+
+    if (!region && mem64)
+    {
+        /* Retry */
+        region = rt_pci_region_alloc(host_bridge, out_addr, size, flags, RT_FALSE);
     }
 
     return region;
@@ -584,19 +661,7 @@ rt_err_t rt_pci_device_alloc_resource(struct rt_pci_host_bridge *host_bridge,
             }
 
             pdev->resource[i].size = size;
-        #ifdef ARCH_SUPPORT_PIO
-            pdev->resource[i].base = addr;
-        #else
-            if (flags != PCI_BUS_REGION_F_IO)
-            {
-                pdev->resource[i].base = addr;
-            }
-            else
-            {
-                rt_ubase_t offset = addr - region->phy_addr;
-                pdev->resource[i].base = region->cpu_addr + offset;
-            }
-        #endif
+            pdev->resource[i].base = region->cpu_addr + (addr - region->phy_addr);
             pdev->resource[i].flags = flags;
 
             if (mem64)
@@ -647,9 +712,11 @@ rt_err_t rt_pci_device_alloc_resource(struct rt_pci_host_bridge *host_bridge,
     return err;
 }
 
-void rt_pci_enum_device(struct rt_pci_bus *bus, rt_bool_t (callback(struct rt_pci_device *)))
+void rt_pci_enum_device(struct rt_pci_bus *bus,
+        rt_bool_t (callback(struct rt_pci_device *, void *)), void *data)
 {
     rt_bool_t is_end = RT_FALSE;
+    struct rt_spinlock *lock;
     struct rt_pci_bus *parent;
     struct rt_pci_device *pdev, *last_pdev = RT_NULL;
 
@@ -659,33 +726,60 @@ void rt_pci_enum_device(struct rt_pci_bus *bus, rt_bool_t (callback(struct rt_pc
         /* Goto bottom */
         for (;;)
         {
+            lock = &bus->lock;
+
+            spin_lock(lock);
             if (rt_list_isempty(&bus->children_nodes))
             {
                 parent = bus->parent;
                 break;
             }
             bus = rt_list_entry(&bus->children_nodes, struct rt_pci_bus, list);
+            spin_unlock(lock);
         }
 
-        rt_list_for_each_entry(pdev, &bus->devices_nodes, list_in_bus)
+        rt_list_for_each_entry(pdev, &bus->devices_nodes, list)
         {
-            if (last_pdev && callback(last_pdev))
+            if (last_pdev)
             {
-                is_end = RT_TRUE;
-                break;
+                spin_unlock(lock);
+
+                if (callback(last_pdev, data))
+                {
+                    spin_lock(lock);
+                    --last_pdev->parent.ref_count;
+
+                    is_end = RT_TRUE;
+                    break;
+                }
+
+                spin_lock(lock);
+                --last_pdev->parent.ref_count;
             }
+            ++pdev->parent.ref_count;
             last_pdev = pdev;
         }
 
-        if (last_pdev && callback(last_pdev))
+        if (!is_end && last_pdev)
         {
-            is_end = RT_TRUE;
+            spin_unlock(lock);
+
+            if (callback(last_pdev, data))
+            {
+                is_end = RT_TRUE;
+            }
+
+            spin_lock(lock);
+            --last_pdev->parent.ref_count;
         }
         last_pdev = RT_NULL;
+        spin_unlock(lock);
 
         /* Up a level or goto next */
         while (!is_end)
         {
+            lock = &bus->lock;
+
             if (!parent)
             {
                 /* Root bus, is end */
@@ -693,32 +787,55 @@ void rt_pci_enum_device(struct rt_pci_bus *bus, rt_bool_t (callback(struct rt_pc
                 break;
             }
 
+            spin_lock(lock);
             if (bus->list.next != &parent->children_nodes)
             {
                 /* Has next sibling */
                 bus = rt_list_entry(bus->list.next, struct rt_pci_bus, list);
+                spin_unlock(lock);
                 break;
             }
 
             /* All device on this buss' parent */
-            rt_list_for_each_entry(pdev, &parent->devices_nodes, list_in_bus)
+            rt_list_for_each_entry(pdev, &parent->devices_nodes, list)
             {
-                if (last_pdev && callback(last_pdev))
+                if (last_pdev)
                 {
-                    is_end = RT_TRUE;
-                    break;
+                    spin_unlock(lock);
+
+                    if (callback(last_pdev, data))
+                    {
+                        spin_lock(lock);
+                        --last_pdev->parent.ref_count;
+
+                        is_end = RT_TRUE;
+                        break;
+                    }
+
+                    spin_lock(lock);
+                    --last_pdev->parent.ref_count;
                 }
+                ++pdev->parent.ref_count;
                 last_pdev = pdev;
             }
 
-            if (last_pdev && callback(last_pdev))
+            if (!is_end && last_pdev)
             {
-                is_end = RT_TRUE;
+                spin_unlock(lock);
+
+                if (callback(last_pdev, data))
+                {
+                    is_end = RT_TRUE;
+                }
+
+                spin_lock(lock);
+                --last_pdev->parent.ref_count;
             }
             last_pdev = RT_NULL;
 
             bus = parent;
             parent = parent->parent;
+            spin_unlock(lock);
         }
     }
 }
@@ -775,8 +892,6 @@ rt_err_t rt_pci_device_register(struct rt_pci_device *pdev)
     rt_err_t err;
     RT_ASSERT(pdev != RT_NULL);
 
-    rt_list_init(&pdev->list);
-
     if ((err = rt_bus_add_device(&pci_bus, &pdev->parent)))
     {
         return err;
@@ -828,6 +943,7 @@ static rt_err_t pci_probe(rt_device_t dev)
 static rt_err_t pci_remove(rt_device_t dev)
 {
     rt_err_t err = RT_EOK;
+    struct rt_pci_bus *bus;
     struct rt_pci_driver *pdrv = rt_container_of(dev->drv, struct rt_pci_driver, parent);
     struct rt_pci_device *pdev = rt_container_of(dev, struct rt_pci_device, parent);
 
@@ -841,11 +957,17 @@ static rt_err_t pci_remove(rt_device_t dev)
 
     rt_pci_enable_wake(pdev, RT_PCI_D0, RT_FALSE);
 
+    bus = pdev->bus;
+    rt_pci_device_remove(pdev);
+    /* Just try to remove */
+    rt_pci_bus_remove(bus);
+
     return err;
 }
 
 static rt_err_t pci_shutdown(rt_device_t dev)
 {
+    struct rt_pci_bus *bus;
     struct rt_pci_driver *pdrv = rt_container_of(dev->drv, struct rt_pci_driver, parent);
     struct rt_pci_device *pdev = rt_container_of(dev, struct rt_pci_device, parent);
 
@@ -855,6 +977,11 @@ static rt_err_t pci_shutdown(rt_device_t dev)
     }
 
     rt_pci_enable_wake(pdev, RT_PCI_D0, RT_FALSE);
+
+    bus = pdev->bus;
+    rt_pci_device_remove(pdev);
+    /* Just try to remove */
+    rt_pci_bus_remove(bus);
 
     return RT_EOK;
 }

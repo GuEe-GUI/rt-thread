@@ -31,7 +31,7 @@ struct pci_ecam_config_window *pci_ecam_create(struct rt_pci_host_bridge *host_b
     conf_win->bus_shift = ops->bus_shift;
     conf_win->ops = ops;
 
-    host_bridge->ops = (struct rt_pci_ops *)&ops->pci_ops;
+    host_bridge->ops = (const struct rt_pci_ops *)&ops->pci_ops;
 
     return conf_win;
 }

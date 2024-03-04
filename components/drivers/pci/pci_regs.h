@@ -126,6 +126,7 @@
 #define PCIY_PCIAF                  0x13    /* PCI Advanced Features */
 #define PCIY_EA                     0x14    /* PCI Extended Allocation */
 #define PCIY_FPB                    0x15    /* Flattening Portal Bridge */
+#define PCIY_MAX                    PCIY_FPB
 
 /* Extended Capability Register Fields */
 
@@ -183,6 +184,16 @@
 #define PCIZ_PL32                   0x002a  /* Physical Layer 32.0 GT/s */
 #define PCIZ_AP                     0x002b  /* Alternate Protocol */
 #define PCIZ_SFI                    0x002c  /* System Firmware Intermediary */
+
+/* Resizable BARs */
+#define PCIM_REBAR_CAP              4           /* Capability register */
+#define PCIM_REBAR_CAP_SIZES        0x00fffff0  /* Supported BAR sizes */
+#define PCIM_REBAR_CTRL             8           /* Control register */
+#define PCIM_REBAR_CTRL_BAR_IDX     0x00000007  /* BAR index */
+#define PCIM_REBAR_CTRL_NBAR_MASK   0x000000e0
+#define PCIM_REBAR_CTRL_NBAR_SHIFT  5           /* Shift for # of BARs */
+#define PCIM_REBAR_CTRL_BAR_SIZE    0x00001f00  /* BAR size */
+#define PCIM_REBAR_CTRL_BAR_SHIFT   8           /* Shift for BAR size */
 
 /* config registers for header type 0 devices */
 
@@ -880,6 +891,16 @@
 #define PCIER_DEVICE_STA2                   0x2a
 #define PCIER_LINK_CAP2                     0x2c
 #define PCIER_LINK_CTL2                     0x30
+#define PCIEM_LNKCTL2_TLS                   0x000f
+#define PCIEM_LNKCTL2_TLS_2_5GT             0x0001
+#define PCIEM_LNKCTL2_TLS_5_0GT             0x0002
+#define PCIEM_LNKCTL2_TLS_8_0GT             0x0003
+#define PCIEM_LNKCTL2_TLS_16_0GT            0x0004
+#define PCIEM_LNKCTL2_TLS_32_0GT            0x0005
+#define PCIEM_LNKCTL2_TLS_64_0GT            0x0006
+#define PCIEM_LNKCTL2_ENTER_COMP            0x0010
+#define PCIEM_LNKCTL2_TX_MARGIN             0x0380
+#define PCIEM_LNKCTL2_HASD                  0x0020
 #define PCIER_LINK_STA2                     0x32
 #define PCIER_SLOT_CAP2                     0x34
 #define PCIER_SLOT_CTL2                     0x38
@@ -893,6 +914,7 @@
 #define PCIR_MSIX_TABLE                     0x4
 #define PCIR_MSIX_PBA                       0x8
 #define PCIM_MSIX_BIR_MASK                  0x7
+#define PCIM_MSIX_TABLE_OFFSET              0xfffffff8
 #define PCIM_MSIX_BIR_BAR_10                0
 #define PCIM_MSIX_BIR_BAR_14                1
 #define PCIM_MSIX_BIR_BAR_18                2
@@ -1012,6 +1034,41 @@
 #define PCIR_VSEC_REV(hdr)                  (((hdr) & 0xf0000) >> 16)
 #define PCIR_VSEC_LENGTH(hdr)               (((hdr) & 0xfff00000) >> 20)
 #define PCIR_VSEC_DATA                      0x08
+
+/* ASPM L1 PM Substates */
+#define PCIR_L1SS_CAP                       0x04        /* Capabilities Register */
+#define PCIM_L1SS_CAP_PCIPM_L1_2            0x00000001  /* PCI-PM L1.2 Supported */
+#define PCIM_L1SS_CAP_PCIPM_L1_1            0x00000002  /* PCI-PM L1.1 Supported */
+#define PCIM_L1SS_CAP_ASPM_L1_2             0x00000004  /* ASPM L1.2 Supported */
+#define PCIM_L1SS_CAP_ASPM_L1_1             0x00000008  /* ASPM L1.1 Supported */
+#define PCIM_L1SS_CAP_L1_PM_SS              0x00000010  /* L1 PM Substates Supported */
+#define PCIM_L1SS_CAP_CM_RESTORE_TIME       0x0000ff00  /* Port Common_Mode_Restore_Time */
+#define PCIM_L1SS_CAP_P_PWR_ON_SCALE        0x00030000  /* Port T_POWER_ON scale */
+#define PCIM_L1SS_CAP_P_PWR_ON_VALUE        0x00f80000  /* Port T_POWER_ON value */
+#define PCIR_L1SS_CTL1                      0x08        /* Control 1 Register */
+#define PCIM_L1SS_CTL1_PCIPM_L1_2           0x00000001  /* PCI-PM L1.2 Enable */
+#define PCIM_L1SS_CTL1_PCIPM_L1_1           0x00000002  /* PCI-PM L1.1 Enable */
+#define PCIM_L1SS_CTL1_ASPM_L1_2            0x00000004  /* ASPM L1.2 Enable */
+#define PCIM_L1SS_CTL1_ASPM_L1_1            0x00000008  /* ASPM L1.1 Enable */
+#define PCIM_L1SS_CTL1_L1_2_MASK            0x00000005
+#define PCIM_L1SS_CTL1_L1SS_MASK            0x0000000f
+#define PCIM_L1SS_CTL1_CM_RESTORE_TIME      0x0000ff00  /* Common_Mode_Restore_Time */
+#define PCIM_L1SS_CTL1_LTR_L12_TH_VALUE     0x03ff0000  /* LTR_L1.2_THRESHOLD_Value */
+#define PCIM_L1SS_CTL1_LTR_L12_TH_SCALE     0xe0000000  /* LTR_L1.2_THRESHOLD_Scale */
+#define PCIR_L1SS_CTL2                      0x0c        /* Control 2 Register */
+#define PCIM_L1SS_CTL2_T_PWR_ON_SCALE       0x00000003  /* T_POWER_ON Scale */
+#define PCIM_L1SS_CTL2_T_PWR_ON_VALUE       0x000000f8  /* T_POWER_ON Value */
+
+/* Alternative Routing-ID Interpretation */
+#define PCIR_ARI_CAP                        0x04                /* Capabilities Register */
+#define PCIM_ARI_CAP_MFVC                   0x0001              /* MFVC Function Groups Capability */
+#define PCIM_ARI_CAP_ACS                    0x0002              /* ACS Function Groups Capability */
+#define PCIM_ARI_CAP_NFN(x)                 (((x) >> 8) & 0xff) /* Next Function Number */
+#define PCIR_ARI_CTRL                       0x06                /* ARI Control Register */
+#define PCIM_ARI_CTRL_MFVC                  0x0001              /* MFVC Function Groups Enable */
+#define PCIM_ARI_CTRL_ACS                   0x0002              /* ACS Function Groups Enable */
+#define PCIM_ARI_CTRL_FG(x)                 (((x) >> 4) & 7)    /* Function Group */
+#define PCIR_EXT_CAP_ARI_SIZEOF             8
 
 /*
  * PCI Express Firmware Interface definitions

@@ -44,7 +44,7 @@
 struct pci_ecam_ops
 {
     rt_uint32_t bus_shift;
-    struct rt_pci_ops pci_ops;
+    const struct rt_pci_ops pci_ops;
 };
 
 struct pci_ecam_config_window

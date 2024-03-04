@@ -37,9 +37,25 @@
  *  7:3 = slot
  *  2:0 = function
  */
+#define RT_PCI_DEVID(bus, devfn)    ((((rt_uint16_t)(bus)) << 8) | (devfn))
 #define RT_PCI_DEVFN(slot, func)    ((((slot) & 0x1f) << 3) | ((func) & 0x07))
 #define RT_PCI_SLOT(devfn)          (((devfn) >> 3) & 0x1f)
 #define RT_PCI_FUNC(devfn)          ((devfn) & 0x07)
+
+#define PCIE_LINK_STATE_L0S         RT_BIT(0)
+#define PCIE_LINK_STATE_L1          RT_BIT(1)
+#define PCIE_LINK_STATE_CLKPM       RT_BIT(2)
+#define PCIE_LINK_STATE_L1_1        RT_BIT(3)
+#define PCIE_LINK_STATE_L1_2        RT_BIT(4)
+#define PCIE_LINK_STATE_L1_1_PCIPM  RT_BIT(5)
+#define PCIE_LINK_STATE_L1_2_PCIPM  RT_BIT(6)
+#define PCIE_LINK_STATE_ALL         \
+( \
+    PCIE_LINK_STATE_L0S | PCIE_LINK_STATE_L1 | \
+    PCIE_LINK_STATE_CLKPM | \
+    PCIE_LINK_STATE_L1_1 | PCIE_LINK_STATE_L1_2 | \
+    PCIE_LINK_STATE_L1_1_PCIPM | PCIE_LINK_STATE_L1_2_PCIPM \
+)
 
 struct rt_pci_bus_region
 {
@@ -95,6 +111,12 @@ struct rt_pci_device_id
     .subsystem_vendor = PCI_ANY_ID, \
     .subsystem_device = PCI_ANY_ID
 
+#define RT_PCI_DEVICE_CLASS(dev_class, dev_class_mask)  \
+    .vendor = PCI_ANY_ID, .device = PCI_ANY_ID,         \
+    .subsystem_vendor = PCI_ANY_ID,                     \
+    .subsystem_device = PCI_ANY_ID,                     \
+    .class = (dev_class), .class_mask = (dev_class_mask),
+
     rt_uint32_t vendor, device;     /* Vendor and device ID or PCI_ANY_ID */
     rt_uint32_t subsystem_vendor;   /* Subsystem ID's or PCI_ANY_ID */
     rt_uint32_t subsystem_device;   /* Subsystem ID's or PCI_ANY_ID */
@@ -109,7 +131,6 @@ struct rt_pci_device
     const char *name;
 
     rt_list_t list;
-    rt_list_t list_in_bus;
     struct rt_pci_bus *bus;
     struct rt_pci_bus *subbus;      /* In PCI-to-PCI bridge, 'End Point' or 'Port' is NULL */
 
@@ -127,6 +148,8 @@ struct rt_pci_device
     rt_uint8_t min_grantl;
     rt_uint8_t int_pin;
     rt_uint8_t int_line;
+    rt_uint16_t exp_flags;
+    rt_uint32_t cfg_size;
 
     void *sysdata;
 
@@ -163,15 +186,17 @@ struct rt_pci_host_bridge
 {
     struct rt_device parent;
 
-    rt_uint32_t busnr;
     rt_uint32_t domain;
 
     struct rt_pci_bus *root_bus;
-    struct rt_pci_ops *ops;
+    const struct rt_pci_ops *ops;
+    const struct rt_pci_ops *child_ops;
 
     rt_uint32_t bus_range[2];
     rt_size_t bus_regions_nr;
     struct rt_pci_bus_region *bus_regions;
+    rt_size_t dma_regions_nr;
+    struct rt_pci_bus_region *dma_regions;
 
     rt_uint8_t (*irq_slot)(struct rt_pci_device *pdev, rt_uint8_t *pinp);
     int (*irq_map)(struct rt_pci_device *pdev, rt_uint8_t slot, rt_uint8_t pin);
@@ -209,10 +234,11 @@ struct rt_pci_bus
         struct rt_pci_host_bridge *host_bridge;
     };
 
-    struct rt_pci_ops *ops;
+    const struct rt_pci_ops *ops;
 
     char name[48];
     char number;
+    struct rt_spinlock lock;
 
     void *sysdata;
 };
@@ -264,7 +290,11 @@ rt_inline rt_bool_t rt_pci_pme_capable(struct rt_pci_device *pdev,
 void rt_pci_msi_init(struct rt_pci_device *pdev);
 void rt_pci_msix_init(struct rt_pci_device *pdev);
 
+void rt_pci_set_master(struct rt_pci_device *pdev);
+void rt_pci_clear_master(struct rt_pci_device *pdev);
+
 struct rt_pci_host_bridge *rt_pci_host_bridge_alloc(rt_size_t priv_size);
+rt_err_t rt_pci_host_bridge_free(struct rt_pci_host_bridge *);
 rt_err_t rt_pci_host_bridge_init(struct rt_pci_host_bridge *host_bridge);
 rt_err_t rt_pci_host_bridge_probe(struct rt_pci_host_bridge *host_bridge);
 
@@ -273,9 +303,14 @@ struct rt_pci_device *rt_pci_scan_single_device(struct rt_pci_bus *bus, rt_uint3
 rt_err_t rt_pci_setup_device(struct rt_pci_device *pdev);
 rt_size_t rt_pci_scan_slot(struct rt_pci_bus *bus, rt_uint32_t devfn);
 rt_uint32_t rt_pci_scan_child_buses(struct rt_pci_bus *bus, rt_size_t buses);
+rt_uint32_t rt_pci_scan_child_bus(struct rt_pci_bus *bus);
 
 rt_err_t rt_pci_host_bridge_register(struct rt_pci_host_bridge *host_bridge);
 rt_err_t rt_pci_scan_root_bus_bridge(struct rt_pci_host_bridge *host_bridge);
+
+rt_err_t rt_pci_host_bridge_remove(struct rt_pci_host_bridge *host_bridge);
+rt_err_t rt_pci_bus_remove(struct rt_pci_bus *bus);
+rt_err_t rt_pci_device_remove(struct rt_pci_device *pdev);
 
 rt_uint32_t rt_pci_domain(struct rt_pci_device *pdev);
 
@@ -283,8 +318,16 @@ rt_uint8_t rt_pci_bus_find_capability(struct rt_pci_bus *bus, rt_uint32_t devfn,
 rt_uint8_t rt_pci_find_capability(struct rt_pci_device *pdev, int cap);
 rt_uint8_t rt_pci_find_next_capability(struct rt_pci_device *pdev, rt_uint8_t pos, int cap);
 
+rt_uint16_t rt_pci_find_ext_capability(struct rt_pci_device *pdev, int cap);
+rt_uint16_t rt_pci_find_ext_next_capability(struct rt_pci_device *pdev, rt_uint16_t pos, int cap);
+
 struct rt_pci_bus *rt_pci_find_root_bus(struct rt_pci_bus *bus);
 struct rt_pci_host_bridge *rt_pci_find_host_bridge(struct rt_pci_bus *bus);
+
+rt_inline rt_uint16_t rt_pci_dev_id(struct rt_pci_device *pdev)
+{
+    return RT_PCI_DEVID(pdev->bus->number, pdev->devfn);
+}
 
 rt_inline rt_bool_t rt_pci_is_root_bus(struct rt_pci_bus *bus)
 {
@@ -299,11 +342,11 @@ rt_inline rt_bool_t rt_pci_is_bridge(struct rt_pci_device *pdev)
 
 rt_inline rt_bool_t rt_pci_is_pcie(struct rt_pci_device *pdev)
 {
-    return pdev->pcie_cap;
+    return !!pdev->pcie_cap;
 }
 
 #define rt_pci_foreach_bridge(pdev, bus) \
-    rt_list_for_each_entry(pdev, &bus->devices_nodes, list_in_bus) \
+    rt_list_for_each_entry(pdev, &bus->devices_nodes, list) \
         if (rt_pci_is_bridge(pdev))
 
 rt_err_t rt_pci_bus_read_config_u8(struct rt_pci_bus *bus,
@@ -323,6 +366,11 @@ rt_err_t rt_pci_bus_write_config_u32(struct rt_pci_bus *bus,
 rt_err_t rt_pci_bus_read_config_uxx(struct rt_pci_bus *bus,
         rt_uint32_t devfn, int reg, int width, rt_uint32_t *value);
 rt_err_t rt_pci_bus_write_config_uxx(struct rt_pci_bus *bus,
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t value);
+
+rt_err_t rt_pci_bus_read_config_generic_u32(struct rt_pci_bus *bus,
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t *value);
+rt_err_t rt_pci_bus_write_config_generic_u32(struct rt_pci_bus *bus,
         rt_uint32_t devfn, int reg, int width, rt_uint32_t value);
 
 rt_inline rt_err_t rt_pci_read_config_u8(const struct rt_pci_device *pdev,
@@ -372,7 +420,9 @@ rt_err_t rt_pci_ofw_host_bridge_init(struct rt_ofw_node *dev_np,
         struct rt_pci_host_bridge *host_bridge);
 
 rt_err_t rt_pci_ofw_bus_init(struct rt_pci_bus *bus);
+rt_err_t rt_pci_ofw_bus_free(struct rt_pci_bus *bus);
 rt_err_t rt_pci_ofw_device_init(struct rt_pci_device *pdev);
+rt_err_t rt_pci_ofw_device_free(struct rt_pci_device *pdev);
 #else
 rt_inline rt_err_t rt_pci_ofw_host_bridge_init(struct rt_ofw_node *dev_np,
         struct rt_pci_host_bridge *host_bridge)
@@ -383,7 +433,15 @@ rt_inline rt_err_t rt_pci_ofw_bus_init(struct rt_pci_bus *bus)
 {
     return RT_EOK;
 }
+rt_inline rt_err_t rt_pci_ofw_bus_free(struct rt_pci_bus *bus)
+{
+    return RT_EOK;
+}
 rt_inline rt_err_t rt_pci_ofw_device_init(struct rt_pci_device *pdev)
+{
+    return RT_EOK;
+}
+rt_inline rt_err_t rt_pci_ofw_device_free(struct rt_pci_device *pdev)
 {
     return RT_EOK;
 }
@@ -442,44 +500,44 @@ rt_ssize_t rt_pci_msix_enable_range_affinity(struct rt_pci_device *pdev,
         struct rt_pci_msix_entry *entries, int min, int max,
         RT_DECLARE_IRQ_AFFINITY((*affinities)));
 #else
-rt_ssize_t rt_pci_alloc_vector(struct rt_pci_device *pdev, int min, int max,
+rt_inline rt_ssize_t rt_pci_alloc_vector(struct rt_pci_device *pdev, int min, int max,
         rt_uint32_t flags, RT_DECLARE_IRQ_AFFINITY((*affinities)))
 {
     return -RT_ENOSYS;
 }
 
-void rt_pci_free_vector(struct rt_pci_device *pdev)
+rt_inline void rt_pci_free_vector(struct rt_pci_device *pdev)
 {
     return;
 }
 
-rt_ssize_t rt_pci_msi_vector_count(struct rt_pci_device *pdev)
+rt_inline rt_ssize_t rt_pci_msi_vector_count(struct rt_pci_device *pdev)
 {
     return 0;
 }
 
-rt_err_t rt_pci_msi_disable(struct rt_pci_device *pdev)
+rt_inline rt_err_t rt_pci_msi_disable(struct rt_pci_device *pdev)
 {
     return RT_EOK;
 }
 
-rt_ssize_t rt_pci_msi_enable_range_affinity(struct rt_pci_device *pdev,
+rt_inline rt_ssize_t rt_pci_msi_enable_range_affinity(struct rt_pci_device *pdev,
         int min, int max, RT_DECLARE_IRQ_AFFINITY((*affinities)))
 {
     return -RT_ENOSYS;
 }
 
-rt_ssize_t rt_pci_msix_vector_count(struct rt_pci_device *pdev)
+rt_inline rt_ssize_t rt_pci_msix_vector_count(struct rt_pci_device *pdev)
 {
     return 0;
 }
 
-rt_err_t rt_pci_msix_disable(struct rt_pci_device *pdev)
+rt_inline rt_err_t rt_pci_msix_disable(struct rt_pci_device *pdev)
 {
     return RT_EOK;
 }
 
-rt_ssize_t rt_pci_msix_enable_range_affinity(struct rt_pci_device *pdev,
+rt_inline rt_ssize_t rt_pci_msix_enable_range_affinity(struct rt_pci_device *pdev,
         struct rt_pci_msix_entry *entries, int min, int max,
         RT_DECLARE_IRQ_AFFINITY((*affinities)))
 {
@@ -527,7 +585,8 @@ struct rt_pci_bus_region *rt_pci_region_alloc(struct rt_pci_host_bridge *host_br
 rt_err_t rt_pci_device_alloc_resource(struct rt_pci_host_bridge *host_bridge,
         struct rt_pci_device *pdev);
 
-void rt_pci_enum_device(struct rt_pci_bus *bus, rt_bool_t (callback(struct rt_pci_device *)));
+void rt_pci_enum_device(struct rt_pci_bus *bus,
+        rt_bool_t (callback(struct rt_pci_device *, void *)), void *data);
 
 const struct rt_pci_device_id *rt_pci_match_id(struct rt_pci_device *pdev,
         const struct rt_pci_device_id *id);

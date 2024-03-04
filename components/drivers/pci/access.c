@@ -60,7 +60,7 @@ PCI_OPS(u32, rt_uint32_t)
 #undef PCI_OPS
 
 rt_err_t rt_pci_bus_read_config_uxx(struct rt_pci_bus *bus,
-        rt_uint32_t devfn, int reg, int width, rt_uint32_t *val)
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t *value)
 {
     void *base;
 
@@ -68,15 +68,15 @@ rt_err_t rt_pci_bus_read_config_uxx(struct rt_pci_bus *bus,
     {
         if (width == 1)
         {
-            *val = HWREG8(base);
+            *value = HWREG8(base);
         }
         else if (width == 2)
         {
-            *val = HWREG16(base);
+            *value = HWREG16(base);
         }
         else
         {
-            *val = HWREG32(base);
+            *value = HWREG32(base);
         }
 
         return RT_EOK;
@@ -86,7 +86,7 @@ rt_err_t rt_pci_bus_read_config_uxx(struct rt_pci_bus *bus,
 }
 
 rt_err_t rt_pci_bus_write_config_uxx(struct rt_pci_bus *bus,
-        rt_uint32_t devfn, int reg, int width, rt_uint32_t val)
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t value)
 {
     void *base;
 
@@ -94,15 +94,62 @@ rt_err_t rt_pci_bus_write_config_uxx(struct rt_pci_bus *bus,
     {
         if (width == 1)
         {
-            HWREG8(base) = val;
+            HWREG8(base) = value;
         }
         else if (width == 2)
         {
-            HWREG16(base) = val;
+            HWREG16(base) = value;
         }
         else
         {
-            HWREG32(base) = val;
+            HWREG32(base) = value;
+        }
+
+        return RT_EOK;
+    }
+
+    return -RT_ERROR;
+}
+
+rt_err_t rt_pci_bus_read_config_generic_u32(struct rt_pci_bus *bus,
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t *value)
+{
+    void *base;
+
+    if ((base = bus->ops->map(bus, devfn, reg)))
+    {
+        *value = HWREG32(base);
+
+        if (width <= 2)
+        {
+            *value = (*value >> (8 * (reg & 3))) & ((1 << (width * 8)) - 1);
+        }
+
+        return RT_EOK;
+    }
+
+    return -RT_ERROR;
+}
+
+rt_err_t rt_pci_bus_write_config_generic_u32(struct rt_pci_bus *bus,
+        rt_uint32_t devfn, int reg, int width, rt_uint32_t value)
+{
+    void *base;
+
+    if ((base = bus->ops->map(bus, devfn, reg & ~0x3)))
+    {
+        if (width == 4)
+        {
+            HWREG32(base) = value;
+        }
+        else
+        {
+            rt_uint32_t mask, tmp;
+
+            mask = ~(((1 << (width * 8)) - 1) << ((reg & 0x3) * 8));
+            tmp = HWREG32(base) & mask;
+            tmp |= value << ((reg & 0x3) * 8);
+            HWREG32(base) = tmp;
         }
 
         return RT_EOK;

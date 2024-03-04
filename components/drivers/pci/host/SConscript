@@ -8,6 +8,24 @@ CPPPATH = [cwd + '/../../include']
 
 src = []
 
+if GetDepend(['RT_PCI_HOST_COMMON']):
+    src += ['pci-host-common.c']
+
+if GetDepend(['RT_PCI_HOST_GENERIC']):
+    src += ['pci-host-generic.c']
+
+if GetDepend(['RT_PCIE_BRCMSTB']):
+    src += ['pcie-brcmstb.c']
+
+if GetDepend(['RT_PCIE_ROCKCHIP']):
+    src += ['pcie-rockchip-host.c']
+
+if GetDepend(['RT_PCIE_ROCKCHIP_EP']):
+    src += ['pcie-rockchip-ep.c']
+
+if GetDepend(['RT_PCIE_ROCKCHIP']) or GetDepend(['RT_PCIE_ROCKCHIP_EP']):
+    src += ['pcie-rockchip.c']
+
 group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 
 for d in list:

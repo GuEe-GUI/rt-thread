@@ -158,46 +158,32 @@ _end:
     return irq;
 }
 
-rt_err_t rt_pci_ofw_parse_ranges(struct rt_ofw_node *dev_np,
-        struct rt_pci_host_bridge *host_bridge)
+static rt_err_t pci_ofw_parse_ranges(struct rt_ofw_node *dev_np, const char *propname,
+        int phy_addr_cells, int phy_size_cells, int cpu_addr_cells,
+        struct rt_pci_bus_region **out_regions, rt_size_t *out_regions_nr)
 {
     const fdt32_t *cell;
     rt_ssize_t total_cells;
     int groups, space_code;
     rt_uint32_t phy_addr[3];
     rt_uint64_t cpu_addr, phy_addr_size;
-    int phy_addr_cells = -1, phy_size_cells = -1, cpu_addr_cells;
 
-    if (!dev_np || !host_bridge)
-    {
-        return -RT_EINVAL;
-    }
-
-    cpu_addr_cells = rt_ofw_io_addr_cells(dev_np);
-    rt_ofw_prop_read_s32(dev_np, "#address-cells", &phy_addr_cells);
-    rt_ofw_prop_read_s32(dev_np, "#size-cells", &phy_size_cells);
-
-    if (phy_addr_cells != 3 || phy_size_cells < 1 || cpu_addr_cells < 1)
-    {
-        return -RT_EINVAL;
-    }
-
-    cell = rt_ofw_prop_read_raw(dev_np, "ranges", &total_cells);
+    *out_regions = RT_NULL;
+    *out_regions_nr = 0;
+    cell = rt_ofw_prop_read_raw(dev_np, propname, &total_cells);
 
     if (!cell)
     {
-        return -RT_EINVAL;
+        return -RT_EEMPTY;
     }
 
     groups = total_cells / sizeof(*cell) / (phy_addr_cells + phy_size_cells + cpu_addr_cells);
-    host_bridge->bus_regions = rt_malloc(groups * sizeof(struct rt_pci_bus_region));
+    *out_regions = rt_malloc(groups * sizeof(struct rt_pci_bus_region));
 
-    if (!host_bridge->bus_regions)
+    if (!*out_regions)
     {
         return -RT_ENOMEM;
     }
-
-    host_bridge->bus_regions_nr = 0;
 
     for (int i = 0; i < groups; ++i)
     {
@@ -233,30 +219,83 @@ rt_err_t rt_pci_ofw_parse_ranges(struct rt_ofw_node *dev_np,
         phy_addr_size = rt_fdt_read_number(cell, phy_size_cells);
         cell += phy_size_cells;
 
-        host_bridge->bus_regions[i].phy_addr = ((rt_uint64_t)phy_addr[1] << 32) | phy_addr[2];
-        host_bridge->bus_regions[i].cpu_addr = cpu_addr;
-        host_bridge->bus_regions[i].size = phy_addr_size;
+        (*out_regions)[i].phy_addr = ((rt_uint64_t)phy_addr[1] << 32) | phy_addr[2];
+        (*out_regions)[i].cpu_addr = cpu_addr;
+        (*out_regions)[i].size = phy_addr_size;
 
-        host_bridge->bus_regions[i].bus_start = host_bridge->bus_regions[i].phy_addr;
+        (*out_regions)[i].bus_start = (*out_regions)[i].phy_addr;
 
         if (space_code & 2)
         {
-            host_bridge->bus_regions[i].flags = phy_addr[0] & (1U << 30) ?
+            (*out_regions)[i].flags = phy_addr[0] & (1U << 30) ?
                     PCI_BUS_REGION_F_PREFETCH : PCI_BUS_REGION_F_MEM;
         }
         else if (space_code & 1)
         {
-            host_bridge->bus_regions[i].flags = PCI_BUS_REGION_F_IO;
+            (*out_regions)[i].flags = PCI_BUS_REGION_F_IO;
         }
         else
         {
-            continue;
+            (*out_regions)[i].flags = PCI_BUS_REGION_F_NONE;
         }
 
-        ++host_bridge->bus_regions_nr;
+        ++*out_regions_nr;
     }
 
-    return rt_pci_region_setup(host_bridge);
+    return RT_EOK;
+}
+
+rt_err_t rt_pci_ofw_parse_ranges(struct rt_ofw_node *dev_np,
+        struct rt_pci_host_bridge *host_bridge)
+{
+    rt_err_t err;
+    int phy_addr_cells = -1, phy_size_cells = -1, cpu_addr_cells;
+
+    if (!dev_np || !host_bridge)
+    {
+        return -RT_EINVAL;
+    }
+
+    cpu_addr_cells = rt_ofw_io_addr_cells(dev_np);
+    rt_ofw_prop_read_s32(dev_np, "#address-cells", &phy_addr_cells);
+    rt_ofw_prop_read_s32(dev_np, "#size-cells", &phy_size_cells);
+
+    if (phy_addr_cells != 3 || phy_size_cells < 1 || cpu_addr_cells < 1)
+    {
+        return -RT_EINVAL;
+    }
+
+    if (pci_ofw_parse_ranges(dev_np, "ranges",
+        phy_addr_cells, phy_size_cells, cpu_addr_cells,
+        &host_bridge->bus_regions, &host_bridge->bus_regions_nr))
+    {
+        return -RT_EINVAL;
+    }
+
+    if ((err = rt_pci_region_setup(host_bridge)))
+    {
+        rt_free(host_bridge->bus_regions);
+        host_bridge->bus_regions_nr = 0;
+
+        return err;
+    }
+
+    err = pci_ofw_parse_ranges(dev_np, "dma-ranges",
+            phy_addr_cells, phy_size_cells, cpu_addr_cells,
+            &host_bridge->dma_regions, &host_bridge->dma_regions_nr);
+
+    if (err != -RT_EEMPTY)
+    {
+        rt_free(host_bridge->bus_regions);
+        host_bridge->bus_regions_nr = 0;
+
+        LOG_E("%s: Read dma-ranges error = %s", rt_ofw_node_full_name(dev_np),
+                rt_strerror(err));
+
+        return err;
+    }
+
+    return RT_EOK;
 }
 
 rt_err_t rt_pci_ofw_host_bridge_init(struct rt_ofw_node *dev_np,
@@ -287,6 +326,13 @@ rt_err_t rt_pci_ofw_host_bridge_init(struct rt_ofw_node *dev_np,
 }
 
 rt_err_t rt_pci_ofw_bus_init(struct rt_pci_bus *bus)
+{
+    rt_err_t err = RT_EOK;
+
+    return err;
+}
+
+rt_err_t rt_pci_ofw_bus_free(struct rt_pci_bus *bus)
 {
     rt_err_t err = RT_EOK;
 
@@ -419,13 +465,13 @@ static void ofw_msi_pic_init(struct rt_pci_device *pdev)
     struct rt_ofw_node *np, *msi_ic_np = RT_NULL;
 
     /*
-     * NOTE: Typically, a device's RID is equal to the PCI device's DEVFN.
+     * NOTE: Typically, a device's RID is equal to the PCI device's ID.
      * However, in complex bus management scenarios such as servers and PCs,
      * the RID needs to be associated with DMA. In these cases,
      * the RID should be equal to the DMA alias assigned to the
      * PCI device by the system bus.
      */
-    rid = pdev->devfn;
+    rid = rt_pci_dev_id(pdev);
 
     for (bus = pdev->bus; bus; bus = bus->parent)
     {
@@ -491,6 +537,44 @@ _out_put_msi_parent_node:
 #endif
 }
 
+static rt_int32_t ofw_pci_devfn(struct rt_ofw_node *np)
+{
+    rt_int32_t res;
+    rt_uint32_t reg[5];
+
+    res = rt_ofw_prop_read_u32_array_index(np, "reg", 0, RT_ARRAY_SIZE(reg), reg);
+
+    return res > 0 ? ((reg[0] >> 8) & 0xff) : res;
+}
+
+static struct rt_ofw_node *ofw_find_device(struct rt_ofw_node *np, rt_uint32_t devfn)
+{
+    struct rt_ofw_node *dev_np, *mfd_np;
+
+    rt_ofw_foreach_child_node(np, dev_np)
+    {
+        if (ofw_pci_devfn(dev_np) == devfn)
+        {
+            return dev_np;
+        }
+
+        if (rt_ofw_node_tag_equ(dev_np, "multifunc-device"))
+        {
+            rt_ofw_foreach_child_node(dev_np, mfd_np)
+            {
+                if (ofw_pci_devfn(mfd_np) == devfn)
+                {
+                    rt_ofw_node_put(dev_np);
+
+                    return mfd_np;
+                }
+            }
+        }
+    }
+
+    return RT_NULL;
+}
+
 rt_err_t rt_pci_ofw_device_init(struct rt_pci_device *pdev)
 {
     struct rt_ofw_node *np = RT_NULL;
@@ -502,17 +586,36 @@ rt_err_t rt_pci_ofw_device_init(struct rt_pci_device *pdev)
 
     ofw_msi_pic_init(pdev);
 
-    if (pdev->bus->parent)
+    if (rt_pci_is_root_bus(pdev->bus) || !pdev->bus->self)
+    {
+        struct rt_pci_host_bridge *host_bridge;
+
+        host_bridge = rt_pci_find_host_bridge(pdev->bus);
+        RT_ASSERT(host_bridge != RT_NULL);
+
+        np = host_bridge->parent.ofw_node;
+    }
+    else
     {
         np = pdev->bus->self->parent.ofw_node;
     }
 
-    if (!np)
+    if (np)
     {
-        return RT_EOK;
+        pdev->parent.ofw_node = ofw_find_device(np, pdev->devfn);
     }
 
-    pdev->parent.ofw_node = np;
+    return RT_EOK;
+}
+
+rt_err_t rt_pci_ofw_device_free(struct rt_pci_device *pdev)
+{
+    if (!pdev)
+    {
+        return -RT_EINVAL;
+    }
+
+    rt_ofw_node_put(pdev->parent.ofw_node);
 
     return RT_EOK;
 }

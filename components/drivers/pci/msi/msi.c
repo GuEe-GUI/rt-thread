@@ -678,9 +678,14 @@ rt_ssize_t rt_pci_msi_enable_range_affinity(struct rt_pci_device *pdev,
 
     entries_nr = rt_pci_msi_vector_count(pdev);
 
-    if (entries_nr < 0 || nvec > entries_nr)
+    if (entries_nr < 0)
     {
         return entries_nr;
+    }
+
+    if (nvec > entries_nr)
+    {
+        return -RT_EEMPTY;
     }
 
     return msi_capability_init(pdev, nvec, affinities);
@@ -902,9 +907,14 @@ rt_ssize_t rt_pci_msix_enable_range_affinity(struct rt_pci_device *pdev,
 
     entries_nr = rt_pci_msix_vector_count(pdev);
 
-    if (entries_nr < 0 || nvec > entries_nr)
+    if (entries_nr < 0)
     {
         return entries_nr;
+    }
+
+    if (nvec > entries_nr)
+    {
+        return -RT_EEMPTY;
     }
 
     if (!entries)

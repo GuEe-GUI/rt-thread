@@ -15,12 +15,45 @@
 #include <rtdbg.h>
 
 #include <drivers/pci.h>
+#include <drivers/core/bus.h>
+
+rt_inline void spin_lock(struct rt_spinlock *spinlock)
+{
+    rt_hw_spin_lock(&spinlock->lock);
+}
+
+rt_inline void spin_unlock(struct rt_spinlock *spinlock)
+{
+    rt_hw_spin_unlock(&spinlock->lock);
+}
 
 struct rt_pci_host_bridge *rt_pci_host_bridge_alloc(rt_size_t priv_size)
 {
     struct rt_pci_host_bridge *bridge = rt_calloc(1, sizeof(*bridge) + priv_size);
 
     return bridge;
+}
+
+rt_err_t rt_pci_host_bridge_free(struct rt_pci_host_bridge *bridge)
+{
+    if (!bridge)
+    {
+        return -RT_EINVAL;
+    }
+
+    if (bridge->bus_regions)
+    {
+        rt_free(bridge->bus_regions);
+    }
+
+    if (bridge->dma_regions)
+    {
+        rt_free(bridge->dma_regions);
+    }
+
+    rt_free(bridge);
+
+    return RT_EOK;
 }
 
 rt_err_t rt_pci_host_bridge_init(struct rt_pci_host_bridge *host_bridge)
@@ -44,12 +77,14 @@ struct rt_pci_device *rt_pci_alloc_device(struct rt_pci_bus *bus)
         return RT_NULL;
     }
 
-    rt_list_init(&pdev->list_in_bus);
+    rt_list_init(&pdev->list);
     pdev->bus = bus;
 
     if (bus)
     {
-        rt_list_insert_before(&bus->devices_nodes, &pdev->list_in_bus);
+        spin_lock(&bus->lock);
+        rt_list_insert_before(&bus->devices_nodes, &pdev->list);
+        spin_unlock(&bus->lock);
     }
 
     pdev->subsystem_vendor = PCI_ANY_ID;
@@ -72,6 +107,7 @@ struct rt_pci_device *rt_pci_alloc_device(struct rt_pci_bus *bus)
 
 struct rt_pci_device *rt_pci_scan_single_device(struct rt_pci_bus *bus, rt_uint32_t devfn)
 {
+    rt_err_t err;
     struct rt_pci_device *pdev = RT_NULL;
     rt_uint16_t vendor = PCI_ANY_ID, device = PCI_ANY_ID;
 
@@ -80,10 +116,11 @@ struct rt_pci_device *rt_pci_scan_single_device(struct rt_pci_bus *bus, rt_uint3
         goto _end;
     }
 
-    rt_pci_bus_read_config_u16(bus, devfn, PCIR_VENDOR, &vendor);
+    err = rt_pci_bus_read_config_u16(bus, devfn, PCIR_VENDOR, &vendor);
     rt_pci_bus_read_config_u16(bus, devfn, PCIR_DEVICE, &device);
 
-    if (vendor == (typeof(vendor))PCI_ANY_ID)
+    if (vendor == (typeof(vendor))PCI_ANY_ID ||
+        vendor == (typeof(vendor))0x0000 || err)
     {
         goto _end;
     }
@@ -97,8 +134,9 @@ struct rt_pci_device *rt_pci_scan_single_device(struct rt_pci_bus *bus, rt_uint3
     pdev->vendor = vendor;
     pdev->device = device;
 
-    rt_dm_dev_set_name(&pdev->parent, "%04x:%02x:%02x.%d",
-            rt_pci_domain(pdev), pdev->bus->number, RT_PCI_SLOT(pdev->devfn), RT_PCI_FUNC(pdev->devfn));
+    rt_dm_dev_set_name(&pdev->parent, "%04x:%02x:%02x.%u",
+            rt_pci_domain(pdev), pdev->bus->number,
+            RT_PCI_SLOT(pdev->devfn), RT_PCI_FUNC(pdev->devfn));
 
     if (rt_pci_setup_device(pdev))
     {
@@ -160,6 +198,88 @@ static void pcie_set_port_type(struct rt_pci_device *pdev)
     pdev->pcie_cap = pos;
 }
 
+static void pci_configure_ari(struct rt_pci_device *pdev)
+{
+    rt_uint32_t cap, ctl2_ari;
+    struct rt_pci_device *bridge;
+
+    if (!rt_pci_is_pcie(pdev) || pdev->devfn)
+    {
+        return;
+    }
+
+    bridge = pdev->bus->self;
+
+    if (rt_pci_is_root_bus(pdev->bus) || !bridge)
+    {
+        return;
+    }
+
+    rt_pci_read_config_u32(bridge, bridge->pcie_cap + PCIER_DEVICE_CAP2, &cap);
+    if (!(cap & PCIEM_CAP2_ARI))
+    {
+        return;
+    }
+
+    rt_pci_read_config_u32(bridge, bridge->pcie_cap + PCIER_DEVICE_CTL2, &ctl2_ari);
+
+    if (rt_pci_find_ext_capability(pdev, PCIZ_ARI))
+    {
+        ctl2_ari |= PCIEM_CTL2_ARI;
+        bridge->ari_enabled = RT_TRUE;
+    }
+    else
+    {
+        ctl2_ari &= ~PCIEM_CTL2_ARI;
+        bridge->ari_enabled = RT_FALSE;
+    }
+
+    rt_pci_write_config_u32(bridge, bridge->pcie_cap + PCIER_DEVICE_CTL2, ctl2_ari);
+}
+
+static rt_uint16_t pci_cfg_space_size_ext(struct rt_pci_device *pdev)
+{
+    rt_uint32_t status;
+
+    if (rt_pci_read_config_u32(pdev, PCI_REGMAX + 1, &status))
+    {
+        return PCI_REGMAX + 1;
+    }
+
+    return PCIE_REGMAX + 1;
+}
+
+static rt_uint16_t pci_cfg_space_size(struct rt_pci_device *pdev)
+{
+    int pos;
+    rt_uint32_t status;
+    rt_uint16_t class = pdev->class >> 8;
+
+    if (class == PCIS_BRIDGE_HOST)
+    {
+        return pci_cfg_space_size_ext(pdev);
+    }
+
+    if (rt_pci_is_pcie(pdev))
+    {
+        return pci_cfg_space_size_ext(pdev);
+    }
+
+    pos = rt_pci_find_capability(pdev, PCIY_PCIX);
+    if (!pos)
+    {
+        return PCI_REGMAX + 1;
+    }
+
+    rt_pci_read_config_u32(pdev, pos + PCIXR_STATUS, &status);
+    if (status & (PCIXM_STATUS_266CAP | PCIXM_STATUS_533CAP))
+    {
+        return pci_cfg_space_size_ext(pdev);
+    }
+
+    return PCI_REGMAX + 1;
+}
+
 static void pci_init_capabilities(struct rt_pci_device *pdev)
 {
     rt_pci_pme_init(pdev);
@@ -170,6 +290,8 @@ static void pci_init_capabilities(struct rt_pci_device *pdev)
 #endif
 
     pcie_set_port_type(pdev);
+    pdev->cfg_size = pci_cfg_space_size(pdev);
+    pci_configure_ari(pdev);
 
     pdev->no_msi = RT_FALSE;
     pdev->msi_enabled = RT_FALSE;
@@ -214,7 +336,7 @@ rt_err_t rt_pci_setup_device(struct rt_pci_device *pdev)
         pdev->broken_intx_masking = RT_TRUE;
     }
 
-    rt_dm_dev_set_name(&pdev->parent, "%04x:%02x:%02x.%d", rt_pci_domain(pdev),
+    rt_dm_dev_set_name(&pdev->parent, "%04x:%02x:%02x.%u", rt_pci_domain(pdev),
             pdev->bus->number, RT_PCI_SLOT(pdev->devfn), RT_PCI_FUNC(pdev->devfn));
 
     switch (pdev->hdr_type)
@@ -263,60 +385,206 @@ rt_err_t rt_pci_setup_device(struct rt_pci_device *pdev)
 
     pci_init_capabilities(pdev);
 
+    if (rt_pci_is_pcie(pdev))
+    {
+        rt_pci_read_config_u16(pdev, pdev->pcie_cap + PCIER_FLAGS, &pdev->exp_flags);
+    }
+
     return RT_EOK;
+}
+
+static struct rt_pci_bus *pci_alloc_bus(struct rt_pci_bus *parent);
+
+static rt_err_t pci_child_bus_init(struct rt_pci_bus *bus, rt_uint32_t bus_no,
+        struct rt_pci_host_bridge *host_bridge, struct rt_pci_device *pdev)
+{
+    rt_err_t err;
+    struct rt_pci_bus *parent_bus = bus->parent;
+
+    bus->sysdata = parent_bus->sysdata;
+    bus->self = pdev;
+    bus->ops = host_bridge->child_ops ? : parent_bus->ops;
+
+    bus->number = bus_no;
+    rt_sprintf(bus->name, "%04x:%02x", host_bridge->domain, bus_no);
+
+    rt_pci_ofw_bus_init(bus);
+
+    if (bus->ops->add)
+    {
+        if ((err = bus->ops->add(bus)))
+        {
+            rt_pci_ofw_bus_free(bus);
+
+            LOG_E("PCI-Bus<%s> add bus failed with err = %s",
+                    bus->name, rt_strerror(err));
+
+            return err;
+        }
+    }
+
+    return RT_EOK;
+}
+
+static rt_bool_t pci_ea_fixed_busnrs(struct rt_pci_device *pdev,
+        rt_uint8_t *sec, rt_uint8_t *sub)
+{
+    int pos, offset;
+    rt_uint32_t dw;
+    rt_uint8_t ea_sec, ea_sub;
+
+    pos = rt_pci_find_capability(pdev, PCIY_EA);
+    if (!pos)
+    {
+        return RT_FALSE;
+    }
+
+    offset = pos + PCIR_EA_FIRST_ENT;
+    rt_pci_read_config_u32(pdev, offset, &dw);
+    ea_sec = PCIM_EA_SEC_NR(dw);
+    ea_sub = PCIM_EA_SUB_NR(dw);
+    if (ea_sec  == 0 || ea_sub < ea_sec)
+    {
+        return RT_FALSE;
+    }
+
+    *sec = ea_sec;
+    *sub = ea_sub;
+
+    return RT_TRUE;
+}
+
+static void pcie_fixup_link(struct rt_pci_device *pdev)
+{
+    int pos = pdev->pcie_cap;
+    rt_uint16_t exp_lnkctl, exp_lnkctl2, exp_lnksta;
+    rt_uint16_t exp_type = pdev->exp_flags & PCIEM_FLAGS_TYPE;
+
+    if ((pdev->exp_flags & PCIEM_FLAGS_VERSION) < 2)
+    {
+        return;
+    }
+
+    if (exp_type != PCIEM_TYPE_ROOT_PORT &&
+        exp_type != PCIEM_TYPE_DOWNSTREAM_PORT &&
+        exp_type != PCIEM_TYPE_PCIE_BRIDGE)
+    {
+        return;
+    }
+
+    rt_pci_read_config_u16(pdev, pos + PCIER_LINK_CTL, &exp_lnkctl);
+    rt_pci_read_config_u16(pdev, pos + PCIER_LINK_CTL2, &exp_lnkctl2);
+
+    rt_pci_write_config_u16(pdev, pos + PCIER_LINK_CTL2,
+            (exp_lnkctl2 & ~PCIEM_LNKCTL2_TLS) | PCIEM_LNKCTL2_TLS_2_5GT);
+    rt_pci_write_config_u16(pdev, pos + PCIER_LINK_CTL,
+            exp_lnkctl | PCIEM_LINK_CTL_RETRAIN_LINK);
+
+    for (int i = 0; i < 20; ++i)
+    {
+        rt_pci_read_config_u16(pdev, pos + PCIER_LINK_STA, &exp_lnksta);
+
+        if (!!(exp_lnksta & PCIEM_LINK_STA_DL_ACTIVE))
+        {
+            return;
+        }
+
+        rt_thread_mdelay(10);
+    }
+
+    /* Fail, restore */
+    rt_pci_write_config_u16(pdev, pos + PCIER_LINK_CTL2, exp_lnkctl2);
+    rt_pci_write_config_u16(pdev, pos + PCIER_LINK_CTL,
+            exp_lnkctl | PCIEM_LINK_CTL_RETRAIN_LINK);
 }
 
 static rt_uint32_t pci_scan_bridge_extend(struct rt_pci_bus *bus, struct rt_pci_device *pdev,
         rt_uint32_t bus_no_start, rt_uint32_t buses, rt_bool_t reconfigured)
 {
-    rt_bool_t broken = RT_FALSE, is_cardbus;
+    rt_bool_t fixed_buses;
+    rt_uint8_t fixed_sub, fixed_sec;
     rt_uint8_t primary, secondary, subordinate;
-    rt_uint32_t value, bus_no = bus_no_start, next_busnr;
+    rt_uint32_t value, bus_no = bus_no_start;
+    struct rt_pci_bus *next_bus;
+    struct rt_pci_host_bridge *host_bridge;
 
-    is_cardbus = (pdev->hdr_type == PCIM_HDRTYPE_CARDBUS);
+    /* We not supported init CardBus, it always used in the PC servers. */
+    if (pdev->hdr_type == PCIM_HDRTYPE_CARDBUS)
+    {
+        LOG_E("CardBus is not supported in system");
+
+        goto _end;
+    }
 
     rt_pci_read_config_u32(pdev, PCIR_PRIBUS_1, &value);
     primary = value & 0xff;
     secondary = (value >> 8) & 0xff;
     subordinate = (value >> 16) & 0xff;
 
-    LOG_D("Scanning [bus %02x-%02x] behind bridge, reconfigured %d",
-        secondary, subordinate, reconfigured);
-
-    if (!primary && (primary != bus->number) && secondary && subordinate)
+    if (primary == bus->number && bus->number > secondary && secondary > subordinate)
     {
-        LOG_W("Primary bus is hard wired to 0");
+        if (!reconfigured)
+        {
+            goto _end;
+        }
 
-        primary = bus->number;
+        LOG_I("Bridge configuration: primary(%02x) secondary(%02x) subordinate(%02x)",
+                primary, secondary, subordinate);
     }
 
-    /* Check if setup is sensible at all */
-    if (!reconfigured && (primary != bus->number || secondary <= bus->number ||
-        secondary > subordinate))
+    if (pdev->pcie_cap)
     {
-        LOG_I("Bridge configuration invalid ([bus %02x-%02x]), reconfiguring",
-                secondary, subordinate);
-
-        broken = RT_TRUE;
+        pcie_fixup_link(pdev);
     }
 
-    if ((secondary || subordinate) && !is_cardbus && !broken)
+    ++bus_no;
+    /* Count of subordinate */
+    buses -= !!buses;
+
+    host_bridge = rt_pci_find_host_bridge(bus);
+    RT_ASSERT(host_bridge != RT_NULL);
+
+    /* Clear errors */
+    rt_pci_write_config_u16(pdev, PCIR_STATUS, RT_UINT16_MAX);
+
+    fixed_buses = pci_ea_fixed_busnrs(pdev, &fixed_sec, &fixed_sub);
+
+    if (!(next_bus = pci_alloc_bus(bus)))
     {
-        next_busnr = secondary;
+        goto _end;
     }
-    else
+
+    /* Clear bus info */
+    rt_pci_write_config_u32(pdev, PCIR_PRIBUS_1, value & ~0xffffff);
+
+    if (!(next_bus = pci_alloc_bus(bus)))
     {
-        next_busnr = bus_no_start + 1;
+        LOG_E("Alloc bus(%02x) fail", bus_no);
+        goto _end;
     }
 
-    LOG_I("Found: PCI %sBus %04x:%02x", is_cardbus ? "Card" : "",
-            rt_pci_domain(pdev), next_busnr);
+    if (pci_child_bus_init(next_bus, bus_no, host_bridge, pdev))
+    {
+        goto _end;
+    }
 
-    /*
-     * We should init bridge here, but the PCI bridges are always used in the PC
-     * servers. We just output the bridge information to develop.
-     */
+    /* Fill primary, secondary */
+    value = (buses & 0xff000000) | (bus->number << 0) | (next_bus->number << 8);
+    rt_pci_write_config_u32(pdev, PCIR_PRIBUS_1, value);
 
+    bus_no = rt_pci_scan_child_buses(next_bus, buses);
+
+    /* Fill subordinate */
+    value |= next_bus->number + rt_list_len(&next_bus->children_nodes);
+    rt_pci_write_config_u32(pdev, PCIR_PRIBUS_1, value);
+
+    if (fixed_buses)
+    {
+        bus_no = fixed_sub;
+    }
+    rt_pci_write_config_u8(pdev, PCIR_SUBBUS_1, bus_no);
+
+_end:
     return bus_no;
 }
 
@@ -331,34 +599,101 @@ rt_uint32_t rt_pci_scan_bridge(struct rt_pci_bus *bus, struct rt_pci_device *pde
     return pci_scan_bridge_extend(bus, pdev, bus_no_start, 0, reconfigured);
 }
 
+rt_inline rt_bool_t only_one_child(struct rt_pci_bus *bus)
+{
+    struct rt_pci_device *pdev;
+
+    if (rt_pci_is_root_bus(bus))
+    {
+        return RT_FALSE;
+    }
+
+    pdev = bus->self;
+
+    if (rt_pci_is_pcie(pdev))
+    {
+        rt_uint16_t exp_type = pdev->exp_flags & PCIEM_FLAGS_TYPE;
+
+        if (exp_type == PCIEM_TYPE_ROOT_PORT ||
+            exp_type == PCIEM_TYPE_DOWNSTREAM_PORT ||
+            exp_type == PCIEM_TYPE_PCIE_BRIDGE)
+        {
+            return RT_TRUE;
+        }
+    }
+
+    return RT_FALSE;
+}
+
+static int next_fn(struct rt_pci_bus *bus, struct rt_pci_device *pdev, int fn)
+{
+    if (!rt_pci_is_root_bus(bus) && bus->self->ari_enabled)
+    {
+        int pos, next_fn;
+        rt_uint16_t cap = 0;
+
+        if (!pdev)
+        {
+            return -RT_EINVAL;
+        }
+
+        pos = rt_pci_find_ext_capability(pdev, PCIZ_ARI);
+
+        if (!pos)
+        {
+            return -RT_EINVAL;
+        }
+
+        rt_pci_read_config_u16(pdev, pos + PCIR_ARI_CAP, &cap);
+        next_fn = PCIM_ARI_CAP_NFN(cap);
+
+        if (next_fn <= fn)
+        {
+            return -RT_EINVAL;
+        }
+
+        return next_fn;
+    }
+
+    if (fn >= RT_PCI_FUNCTION_MAX - 1)
+    {
+        return -RT_EINVAL;
+    }
+
+    if (pdev && !pdev->multi_function)
+    {
+        return -RT_EINVAL;
+    }
+
+    return fn + 1;
+}
+
 rt_size_t rt_pci_scan_slot(struct rt_pci_bus *bus, rt_uint32_t devfn)
 {
     rt_size_t nr = 0;
+    struct rt_pci_device *pdev = RT_NULL;
 
     if (!bus)
     {
-        goto _end;
+        return nr;
     }
 
-    for (int func = 0; func < RT_PCI_FUNCTION_MAX; ++func, ++devfn)
+    if (devfn > 0 && only_one_child(bus))
     {
-        struct rt_pci_device *pdev = rt_pci_scan_single_device(bus, devfn);
+        return nr;
+    }
+
+    for (int func = 0; func >= 0; func = next_fn(bus, pdev, func))
+    {
+        pdev = rt_pci_scan_single_device(bus, devfn + func);
 
         if (pdev)
         {
             ++nr;
 
-            /* If this is a single function device, don't scan past the first function. */
-            if (!pdev->multi_function)
+            if (func > 0)
             {
-                if (func > 0)
-                {
-                    pdev->multi_function = RT_TRUE;
-                }
-                else
-                {
-                    break;
-                }
+                pdev->multi_function = RT_TRUE;
             }
         }
         else if (func == 0)
@@ -367,7 +702,6 @@ rt_size_t rt_pci_scan_slot(struct rt_pci_bus *bus, rt_uint32_t devfn)
         }
     }
 
-_end:
     return nr;
 }
 
@@ -396,7 +730,7 @@ rt_uint32_t rt_pci_scan_child_buses(struct rt_pci_bus *bus, rt_size_t buses)
     {
         int offset;
 
-        bus_no = pci_scan_bridge_extend(bus, pdev, bus_no, buses, RT_FALSE);
+        bus_no = pci_scan_bridge_extend(bus, pdev, bus_no, buses, RT_TRUE);
         offset = bus_no - bus->number;
 
         if (buses > offset)
@@ -433,6 +767,8 @@ static struct rt_pci_bus *pci_alloc_bus(struct rt_pci_bus *parent)
     rt_list_init(&bus->children_nodes);
     rt_list_init(&bus->devices_nodes);
 
+    rt_spin_lock_init(&bus->lock);
+
     return bus;
 }
 
@@ -451,7 +787,8 @@ rt_err_t rt_pci_host_bridge_register(struct rt_pci_host_bridge *host_bridge)
     bus->host_bridge = host_bridge;
     bus->ops = host_bridge->ops;
 
-    rt_sprintf(bus->name, "%04x:%02x", host_bridge->domain, host_bridge->busnr);
+    bus->number = host_bridge->bus_range[0];
+    rt_sprintf(bus->name, "%04x:%02x", host_bridge->domain, bus->number);
 
     if (bus->ops->add)
     {
@@ -485,6 +822,101 @@ rt_err_t rt_pci_host_bridge_probe(struct rt_pci_host_bridge *host_bridge)
     rt_err_t err;
 
     err = rt_pci_scan_root_bus_bridge(host_bridge);
+
+    return err;
+}
+
+static rt_bool_t pci_remove_bus_device(struct rt_pci_device *pdev, void *data)
+{
+    /* Bus will free if this is the last device */
+    rt_bus_remove_device(&pdev->parent);
+
+    /* To find all devices, always return false */
+    return RT_FALSE;
+}
+
+rt_err_t rt_pci_host_bridge_remove(struct rt_pci_host_bridge *host_bridge)
+{
+    rt_err_t err = RT_EOK;
+
+    if (host_bridge && host_bridge->root_bus)
+    {
+        rt_pci_enum_device(host_bridge->root_bus, pci_remove_bus_device, RT_NULL);
+        host_bridge->root_bus = RT_NULL;
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}
+
+rt_err_t rt_pci_bus_remove(struct rt_pci_bus *bus)
+{
+    rt_err_t err = RT_EOK;
+
+    if (bus)
+    {
+        spin_lock(&bus->lock);
+
+        if (rt_list_isempty(&bus->children_nodes) &&
+            rt_list_isempty(&bus->devices_nodes))
+        {
+            rt_list_remove(&bus->list);
+            spin_unlock(&bus->lock);
+
+            if (bus->ops->remove)
+            {
+                bus->ops->remove(bus);
+            }
+
+            rt_pci_ofw_bus_free(bus);
+            rt_free(bus);
+        }
+        else
+        {
+            spin_unlock(&bus->lock);
+
+            err = -RT_EBUSY;
+        }
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
+
+    return err;
+}
+
+rt_err_t rt_pci_device_remove(struct rt_pci_device *pdev)
+{
+    rt_err_t err = RT_EOK;
+
+    if (pdev)
+    {
+        struct rt_pci_bus *bus = pdev->bus;
+
+        spin_lock(&bus->lock);
+
+        while (pdev->parent.ref_count > 1)
+        {
+            spin_unlock(&bus->lock);
+
+            rt_thread_yield();
+
+            spin_lock(&bus->lock);
+        }
+        rt_list_remove(&pdev->list);
+
+        spin_unlock(&bus->lock);
+
+        rt_free(pdev);
+    }
+    else
+    {
+        err = -RT_EINVAL;
+    }
 
     return err;
 }
