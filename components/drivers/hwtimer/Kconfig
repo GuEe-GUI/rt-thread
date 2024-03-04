@@ -1,0 +1,4 @@
+menuconfig RT_USING_HWTIMER
+    bool "Using Hardware Timer device drivers"
+    default n
+
