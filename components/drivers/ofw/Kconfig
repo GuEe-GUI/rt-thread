@@ -1,0 +1,36 @@
+menuconfig RT_USING_OFW
+    bool "Using Open Firmware (OFW)"
+    depends on RT_USING_DM
+    select RT_USING_ADT
+    select RT_USING_ADT_REF
+    select RT_USING_ADT_BITMAP
+    select RT_USING_PIC
+    default n
+
+config RT_USING_BUILTIN_FDT
+    bool "Using builtin fdt in kernel"
+    depends on RT_USING_OFW
+    default n
+
+config RT_BUILTIN_FDT_PATH
+    string "Builtin fdt path, will rebuild if have dts"
+    depends on RT_USING_BUILTIN_FDT
+    default "rtthread.dtb"
+
+config RT_FDT_EARLYCON_MSG_SIZE
+    int "Earlycon message buffer size (KB)"
+    depends on RT_USING_OFW
+    default 128
+
+config RT_USING_OFW_DIRECTFS
+    bool "Export fdt in direct access"
+    depends on RT_USING_OFW
+    select RT_USING_DFS
+    select RT_USING_DFS_DIRECTFS
+    default n
+
+config RT_USING_OFW_BUS_RANGES_NUMBER
+    int "Max bus ranges number"
+    depends on RT_USING_OFW
+    default 8 if ARCH_CPU_64BIT
+    default 4

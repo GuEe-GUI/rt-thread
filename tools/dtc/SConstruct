@@ -1,0 +1,50 @@
+import os, sys
+
+libfdt = '../../components/drivers/ofw/libfdt/'
+
+env = Environment()
+env.AppendENVPath('PATH', os.environ['PATH'])
+env['CPPPATH'] = [libfdt + 'libfdt']
+# If you want to enable the 'yaml' option in dtc, you need to remove this config.
+env['CPPDEFINES'] = ['NO_YAML', 'HAVE_HOST']
+
+libfdt_src = Split('''
+fdt.c
+fdt_ro.c
+fdt_wip.c
+fdt_sw.c
+fdt_rw.c
+fdt_strerror.c
+fdt_empty_tree.c
+fdt_addresses.c
+fdt_overlay.c
+''')
+
+for i in range(len(libfdt_src)):
+    libfdt_src[i] = libfdt + libfdt_src[i]
+
+dtc_src = Split('''
+dtc.c
+flattree.c
+fstree.c
+data.c
+livetree.c
+treesource.c
+srcpos.c
+checks.c
+util.c
+dtc-lexer.lex.c
+dtc-parser.tab.c
+''')
+
+if 'NO_YAML' not in env['CPPDEFINES']:
+    env['LIBS'] = ['yaml']
+    dtc_src = dtc_src + ['yamltree.c']
+
+fdtoverlay_src = Split('''
+fdtoverlay.c
+util.c
+''')
+
+env.Program('dtc', dtc_src + libfdt_src)
+env.Program('fdtoverlay', fdtoverlay_src + libfdt_src)

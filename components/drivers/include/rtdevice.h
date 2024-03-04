@@ -165,6 +165,19 @@ extern "C" {
 #include "drivers/lcd.h"
 #endif
 
+
+#ifdef RT_USING_OFW
+#include "drivers/ofw.h"
+#include "drivers/ofw_fdt.h"
+#include "drivers/ofw_io.h"
+#include "drivers/ofw_irq.h"
+#include "drivers/ofw_raw.h"
+#endif /* RT_USING_OFW */
+
+#ifdef RT_USING_PIC
+#include "drivers/pic.h"
+#endif
+
 #ifdef __cplusplus
 }
 #endif

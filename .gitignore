@@ -29,6 +29,8 @@ documentation/html
 *.su
 #source insight 4 project files
 *.si4project
+tools/dtc/dtc
+tools/dtc/fdtoverlay
 tools/kconfig-frontends/kconfig-mconf
 packages
 dist
