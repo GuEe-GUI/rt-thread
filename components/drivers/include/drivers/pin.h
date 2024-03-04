@@ -7,6 +7,7 @@
  * Date           Author       Notes
  * 2015-01-20     Bernard      the first version
  * 2017-10-20      ZYH          add mode open drain and input pull down
+ * 2022-11-26     GuEe-GUI     support pinctrl
  */
 
 #ifndef PIN_H__
@@ -35,6 +36,39 @@ struct rt_device_pin
 #define PIN_MODE_INPUT_PULLUP   0x02
 #define PIN_MODE_INPUT_PULLDOWN 0x03
 #define PIN_MODE_OUTPUT_OD      0x04
+
+#ifdef RT_USING_PINCTRL
+enum
+{
+    PIN_CONFIG_BIAS_BUS_HOLD,
+    PIN_CONFIG_BIAS_DISABLE,
+    PIN_CONFIG_BIAS_HIGH_IMPEDANCE,
+    PIN_CONFIG_BIAS_PULL_DOWN,
+    PIN_CONFIG_BIAS_PULL_PIN_DEFAULT,
+    PIN_CONFIG_BIAS_PULL_UP,
+    PIN_CONFIG_DRIVE_OPEN_DRAIN,
+    PIN_CONFIG_DRIVE_OPEN_SOURCE,
+    PIN_CONFIG_DRIVE_PUSH_PULL,
+    PIN_CONFIG_DRIVE_STRENGTH,
+    PIN_CONFIG_DRIVE_STRENGTH_UA,
+    PIN_CONFIG_INPUT_DEBOUNCE,
+    PIN_CONFIG_INPUT_ENABLE,
+    PIN_CONFIG_INPUT_SCHMITT,
+    PIN_CONFIG_INPUT_SCHMITT_ENABLE,
+    PIN_CONFIG_MODE_LOW_POWER,
+    PIN_CONFIG_MODE_PWM,
+    PIN_CONFIG_OUTPUT,
+    PIN_CONFIG_OUTPUT_ENABLE,
+    PIN_CONFIG_OUTPUT_IMPEDANCE_OHMS,
+    PIN_CONFIG_PERSIST_STATE,
+    PIN_CONFIG_POWER_SOURCE,
+    PIN_CONFIG_SKEW_DELAY,
+    PIN_CONFIG_SLEEP_HARDWARE_STATE,
+    PIN_CONFIG_SLEW_RATE,
+    PIN_CONFIG_END = 0x7f,
+    PIN_CONFIG_MAX = 0xff,
+};
+#endif /* RT_USING_PINCTRL */
 
 #define PIN_IRQ_MODE_RISING             0x00
 #define PIN_IRQ_MODE_FALLING            0x01
@@ -66,6 +100,16 @@ struct rt_pin_irq_hdr
     void (*hdr)(void *args);
     void             *args;
 };
+
+#ifdef RT_USING_PINCTRL
+struct rt_pin_ctrl_conf_params
+{
+    const char *propname;
+    rt_uint32_t param;
+    rt_uint32_t default_value;
+};
+#endif /* RT_USING_PINCTRL */
+
 struct rt_pin_ops
 {
     void (*pin_mode)(struct rt_device *device, rt_base_t pin, rt_uint8_t mode);
@@ -76,23 +120,10 @@ struct rt_pin_ops
     rt_err_t (*pin_detach_irq)(struct rt_device *device, rt_base_t pin);
     rt_err_t (*pin_irq_enable)(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled);
     rt_base_t (*pin_get)(const char *name);
-};
-
-struct rt_pin_driver
-{
-    struct rt_driver parent;      
-#ifdef RT_USING_DEVICE_OPS
-    struct rt_pin_ops *ops;
-#else
-    void (*pin_mode)(struct rt_device *device, rt_base_t pin, rt_uint8_t mode);
-    void (*pin_write)(struct rt_device *device, rt_base_t pin, rt_uint8_t value);
-    rt_int8_t  (*pin_read)(struct rt_device *device, rt_base_t pin);
-    rt_err_t (*pin_attach_irq)(struct rt_device *device, rt_base_t pin,
-            rt_uint8_t mode, void (*hdr)(void *args), void *args);
-    rt_err_t (*pin_detach_irq)(struct rt_device *device, rt_base_t pin);
-    rt_err_t (*pin_irq_enable)(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled);
-    rt_base_t (*pin_get)(const char *name);
 #endif
+#ifdef RT_USING_PINCTRL
+    rt_err_t (*pin_ctrl_confs_apply)(struct rt_device *device, void *fw_conf_np);
+#endif /* RT_USING_PINCTRL */
 };
 
 int rt_device_pin_register(const char *name, const struct rt_pin_ops *ops, void *user_data);
@@ -105,6 +136,12 @@ rt_err_t rt_pin_attach_irq(rt_base_t pin, rt_uint8_t mode,
 rt_err_t rt_pin_detach_irq(rt_base_t pin);
 rt_err_t rt_pin_irq_enable(rt_base_t pin, rt_uint8_t enabled);
 
+
+#ifdef RT_USING_PINCTRL
+rt_ssize_t rt_pin_ctrl_confs_lookup(struct rt_device *device, const char *name);
+rt_err_t rt_pin_ctrl_confs_apply(struct rt_device *device, int index);
+rt_err_t rt_pin_ctrl_confs_apply_by_name(struct rt_device *device, const char *name);
+#endif /* RT_USING_PINCTRL */
 #ifdef __cplusplus
 }
 #endif

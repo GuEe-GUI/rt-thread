@@ -11,6 +11,7 @@
 #include <rtthread.h>
 
 #include <drivers/clk.h>
+#include <drivers/pin.h>
 #include <drivers/platform.h>
 #include <drivers/core/rtdm.h>
 
@@ -20,6 +21,10 @@ static rt_err_t fixed_clk_ofw_init(struct rt_platform_device *pdev, struct rt_cl
     rt_uint32_t rate, accuracy;
     struct rt_ofw_node *np = pdev->parent.ofw_node;
     const char *clk_name = np->name;
+
+#ifdef RT_USING_PINCTRL
+    rt_pin_ctrl_confs_apply(&pdev->parent, 0);
+#endif
 
     if (!rt_ofw_prop_read_u32(np, "clock-frequency", &rate))
     {
