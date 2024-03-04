@@ -168,6 +168,7 @@ extern "C" {
 #ifdef RT_USING_DM
 #include "drivers/core/bus.h"
 #include "drivers/core/rtdm.h"
+#include "drivers/core/numa.h"
 #include "drivers/core/power.h"
 #include "drivers/core/power_domain.h"
 #include "drivers/platform.h"
