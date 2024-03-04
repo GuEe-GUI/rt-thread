@@ -38,6 +38,7 @@ struct rt_device
 #ifdef RT_USING_DM
     rt_driver_t drv;
     void *ofw_node;
+    void *power_domain_unit;
 #endif
     enum rt_device_class_type type;                     /**< device type */
     rt_uint16_t               flag;                     /**< device flag */
