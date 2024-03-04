@@ -16,6 +16,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#define __MMU_INTERNAL
+
 #include "mm_aspace.h"
 #include "mm_page.h"
 #include "mmu.h"
@@ -531,18 +533,15 @@ struct page_table
 
 static struct page_table *__init_page_array;
 static unsigned long __page_off = 0UL;
+
+void set_free_page(void *page_array)
+{
+    __init_page_array = page_array;
+}
+
 unsigned long get_free_page(void)
 {
-    if (!__init_page_array)
-    {
-        unsigned long temp_page_start;
-        asm volatile("mov %0, sp" : "=r"(temp_page_start));
-        __init_page_array =
-            (struct page_table *)(temp_page_start & ~(ARCH_SECTION_MASK));
-        __page_off = 2; /* 0, 1 for ttbr0, ttrb1 */
-    }
-    __page_off++;
-    return (unsigned long)(__init_page_array[__page_off - 1].page);
+    return (unsigned long)(__init_page_array[__page_off++].page);
 }
 
 static int _map_single_page_2M(unsigned long *lv0_tbl, unsigned long va,
