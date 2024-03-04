@@ -74,6 +74,13 @@ SECTIONS
         KEEP(*(SORT(.rti_fn*)))
         PROVIDE(__rt_init_end = .);
 
+        /* section information for rt_ofw. */
+        . = ALIGN(16);
+        PROVIDE(__rt_ofw_data_start = .);
+        KEEP(*(SORT(.rt_ofw_data.*)))
+        PROVIDE(__rt_ofw_data_end = .);
+        . = ALIGN(16);
+
         PROVIDE(__text_end = .);
     }
 
@@ -127,6 +134,7 @@ SECTIONS
          * to optimize size.
          */
         *(.bss.noclean.*)
+        . = ALIGN(8);
         PROVIDE(__bss_start = .);
         *(.bss)
         *(.bss.*)
