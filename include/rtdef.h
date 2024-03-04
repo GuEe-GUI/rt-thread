@@ -205,6 +205,7 @@ typedef __gnuc_va_list              va_list;
 #define rt_section(x)               __attribute__((section(x)))
 #define rt_used                     __attribute__((used))
 #define rt_align(n)                 __attribute__((aligned(n)))
+#define rt_packed                   __attribute__((packed))
 #define rt_weak                     __attribute__((weak))
 #define rt_inline                   static __inline
 #define RTT_API
