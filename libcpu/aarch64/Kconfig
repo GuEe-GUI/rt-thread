@@ -5,10 +5,6 @@ config ARCH_ARMV8_EXTENSIONS
     range 0 8
     default 0
 
-config ARCH_SUPPORT_FPU
-    bool "Enable FPU"
-    default y
-
 config ARCH_TEXT_OFFSET
     hex "Text offset"
     default 0x200000

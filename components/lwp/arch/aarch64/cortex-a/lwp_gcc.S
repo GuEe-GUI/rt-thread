@@ -10,7 +10,7 @@
 
 #include "rtconfig.h"
 
-#include "asm-fpu.h"
+#include "asm_fpu.h"
 
 /*********************
  *      SPSR BIT     *
