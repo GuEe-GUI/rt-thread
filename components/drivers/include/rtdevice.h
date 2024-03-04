@@ -173,6 +173,10 @@ extern "C" {
 #include "drivers/core/power_domain.h"
 #include "drivers/platform.h"
 
+#ifdef RT_USING_CLK
+#include "drivers/clk.h"
+#endif
+
 #ifdef RT_USING_FIRMWARE
 #ifdef RT_FIRMWARE_PSCI
 #include "drivers/psci.h"
