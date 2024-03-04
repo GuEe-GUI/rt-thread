@@ -794,15 +794,16 @@ void ls(const char *pathname)
 
                 if (dfs_file_stat(fullpath, &stat) == 0)
                 {
-                    rt_kprintf("%-20s", dirent.d_name);
                     if (S_ISDIR(stat.st_mode))
                     {
-                        rt_kprintf("%-25s\n", "<DIR>");
+                        rt_kprintf("%*.s ", 11, "<DIR>");
                     }
                     else
                     {
-                        rt_kprintf("%-25lu\n", (unsigned long)stat.st_size);
+                        rt_kprintf("%11d ", (unsigned long)stat.st_size);
                     }
+                    rt_kputs(dirent.d_name);
+                    rt_kputs("\n");
                 }
                 else
                     rt_kprintf("BAD file: %s\n", dirent.d_name);
