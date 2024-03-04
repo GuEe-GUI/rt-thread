@@ -165,7 +165,9 @@ extern "C" {
 #include "drivers/lcd.h"
 #endif
 
+#ifdef RT_USING_DM
 #include "drivers/core/bus.h"
+#include "drivers/core/rtdm.h"
 
 #ifdef RT_USING_OFW
 #include "drivers/ofw.h"
@@ -179,6 +181,7 @@ extern "C" {
 #include "drivers/pic.h"
 #endif
 
+#endif /* RT_USING_DM */
 #ifdef __cplusplus
 }
 #endif
