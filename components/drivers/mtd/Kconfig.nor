@@ -1,0 +1,9 @@
+menuconfig RT_USING_MTD_NOR
+    bool "Using MTD Nor Flash device drivers"
+    default n
+
+config RT_USING_MTD_NOR_CFI
+    bool "CFI Flash driver"
+    depends on RT_USING_MTD_NOR
+    depends on RT_USING_DM
+    default n
