@@ -1,63 +1,248 @@
 /*
- * Copyright (c) 2006-2019, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
+ * 2022-08-24     GuEe-GUI     add arch time registers
+ * 2023-02-21     GuEe-GUI     add ICC registers and affinity info
  */
 #ifndef __RT_HW_CPU_H__
 #define __RT_HW_CPU_H__
 
-#include <rthw.h>
-#include <rtthread.h>
-#include <stdbool.h>
+#include <rtdef.h>
+#include <cpuport.h>
 
-#ifndef RT_CPUS_NR
-#define RT_CPUS_NR 1
-#endif /* RT_CPUS_NR */
+#include <mm_aspace.h>
+#include <drivers/ofw.h>
 
-#ifdef RT_USING_SMP
 struct cpu_ops_t
 {
     const char *method;
-    int     (*cpu_init)(rt_uint32_t id);
-    int     (*cpu_boot)(rt_uint32_t id);
+    int     (*cpu_init)(rt_uint32_t id, void *param);
+    int     (*cpu_boot)(rt_uint32_t id, rt_uint64_t entry);
     void    (*cpu_shutdown)(void);
 };
 
-/**
- * Identifier to mark a wrong CPU MPID.
- * All elements in rt_cpu_mpidr_early[] should be initialized with this value
- */
-#define ID_ERROR __INT64_MAX__
+#define sysreg_32(op1, crn, crm, op2)   s3_##op1 ##_##crn ##_##crm ##_##op2
+#define sysreg_64(op1, crn, crm, op2)   sysreg_32(op1, crn, crm, op2)
 
-extern rt_uint64_t rt_cpu_mpidr_early[];
-extern struct dtb_node *_cpu_node[];
+#define MPIDR_AFFINITY_MASK         0x000000ff00ffffffUL
 
-#define cpuid_to_hwid(cpuid) \
-    ((((cpuid) >= 0) && ((cpuid) < RT_CPUS_NR)) ? rt_cpu_mpidr_early[cpuid] : ID_ERROR)
-#define set_hwid(cpuid, hwid) \
-    ((((cpuid) >= 0) && ((cpuid) < RT_CPUS_NR)) ? (rt_cpu_mpidr_early[cpuid] = (hwid)) : ID_ERROR)
-#define get_cpu_node(cpuid) \
-    ((((cpuid) >= 0) && ((cpuid) < RT_CPUS_NR)) ? _cpu_node[cpuid] : NULL)
-#define set_cpu_node(cpuid, node) \
-    ((((cpuid) >= 0) && ((cpuid) < RT_CPUS_NR)) ? (_cpu_node[cpuid] = node) : NULL)
+#define MPIDR_LEVEL_BITS_SHIFT      3
+#define MPIDR_LEVEL_BITS            (1 << MPIDR_LEVEL_BITS_SHIFT)
+#define MPIDR_LEVEL_MASK            ((1 << MPIDR_LEVEL_BITS) - 1)
+#define MPIDR_LEVEL_SHIFT(level)    (((1 << (level)) >> 1) << MPIDR_LEVEL_BITS_SHIFT)
 
-extern int rt_hw_cpu_init();
+#define MPIDR_AFFINITY_LEVEL(mpidr, level) (((mpidr) >> MPIDR_LEVEL_SHIFT(level)) & MPIDR_LEVEL_MASK)
 
-extern int rt_hw_cpu_boot_secondary(int num_cpus, rt_uint64_t *cpu_hw_ids, struct cpu_ops_t *cpu_ops[]);
+#define MIDR_REVISION_SHIFT     0
+#define MIDR_REVISION_MASK      (0xf << MIDR_REVISION_SHIFT)
+#define MIDR_PARTNUM_SHIFT      4
+#define MIDR_PARTNUM_MASK       (0xfff << MIDR_PARTNUM_SHIFT)
+#define MIDR_VARIANT_SHIFT      20
+#define MIDR_VARIANT_MASK       (0xf << MIDR_VARIANT_SHIFT)
+#define MIDR_ARCHITECTURE_SHIFT 16
+#define MIDR_ARCHITECTURE_MASK  (0xf << MIDR_ARCHITECTURE_SHIFT)
+#define MIDR_IMPLEMENTOR_SHIFT  24
+#define MIDR_IMPLEMENTOR_MASK   (0xffU << MIDR_IMPLEMENTOR_SHIFT)
 
-extern void rt_hw_secondary_cpu_idle_exec(void);
+#define MIDR_CPU_MODEL(imp, partnum) \
+    (((rt_uint32_t)imp  << MIDR_IMPLEMENTOR_SHIFT) | \
+    (0xf                << MIDR_ARCHITECTURE_SHIFT) | \
+    ((partnum)          << MIDR_PARTNUM_SHIFT))
 
-extern struct cpu_ops_t cpu_ops_psci;
+#define ARM_CPU_IMP_ARM                 0x41
+#define ARM_CPU_IMP_APM                 0x50
+#define ARM_CPU_IMP_CAVIUM              0x43
+#define ARM_CPU_IMP_BRCM                0x42
+#define ARM_CPU_IMP_QCOM                0x51
+#define ARM_CPU_IMP_NVIDIA              0x4e
+#define ARM_CPU_IMP_FUJITSU             0x46
+#define ARM_CPU_IMP_HISI                0x48
+#define ARM_CPU_IMP_APPLE               0x61
+#define ARM_CPU_IMP_AMPERE              0xc0
 
-extern struct cpu_ops_t cpu_ops_spin_tbl;
+#define ARM_CPU_PART_AEM_V8             0xd0f
+#define ARM_CPU_PART_FOUNDATION         0xd00
+#define ARM_CPU_PART_CORTEX_A57         0xd07
+#define ARM_CPU_PART_CORTEX_A72         0xd08
+#define ARM_CPU_PART_CORTEX_A53         0xd03
+#define ARM_CPU_PART_CORTEX_A73         0xd09
+#define ARM_CPU_PART_CORTEX_A75         0xd0a
+#define ARM_CPU_PART_CORTEX_A35         0xd04
+#define ARM_CPU_PART_CORTEX_A55         0xd05
+#define ARM_CPU_PART_CORTEX_A76         0xd0b
+#define ARM_CPU_PART_NEOVERSE_N1        0xd0c
+#define ARM_CPU_PART_CORTEX_A77         0xd0d
+#define ARM_CPU_PART_NEOVERSE_V1        0xd40
+#define ARM_CPU_PART_CORTEX_A78         0xd41
+#define ARM_CPU_PART_CORTEX_A78AE       0xd42
+#define ARM_CPU_PART_CORTEX_X1          0xd44
+#define ARM_CPU_PART_CORTEX_A510        0xd46
+#define ARM_CPU_PART_CORTEX_A710        0xd47
+#define ARM_CPU_PART_CORTEX_A715        0xd4d
+#define ARM_CPU_PART_CORTEX_X2          0xd48
+#define ARM_CPU_PART_NEOVERSE_N2        0xd49
+#define ARM_CPU_PART_CORTEX_A78C        0xd4b
 
-#endif /* RT_USING_SMP */
+#define APM_CPU_PART_POTENZA            0x000
 
-extern void rt_hw_cpu_shutdown(void);
+#define CAVIUM_CPU_PART_THUNDERX        0x0a1
+#define CAVIUM_CPU_PART_THUNDERX_81XX   0x0a2
+#define CAVIUM_CPU_PART_THUNDERX_83XX   0x0a3
+#define CAVIUM_CPU_PART_THUNDERX2       0x0af
+/* OcteonTx2 series */
+#define CAVIUM_CPU_PART_OCTX2_98XX      0x0b1
+#define CAVIUM_CPU_PART_OCTX2_96XX      0x0b2
+#define CAVIUM_CPU_PART_OCTX2_95XX      0x0b3
+#define CAVIUM_CPU_PART_OCTX2_95XXN     0x0b4
+#define CAVIUM_CPU_PART_OCTX2_95XXMM    0x0b5
+#define CAVIUM_CPU_PART_OCTX2_95XXO     0x0b6
 
-extern void (*system_off)(void);
+#define BRCM_CPU_PART_BRAHMA_B53        0x100
+#define BRCM_CPU_PART_VULCAN            0x516
+
+#define QCOM_CPU_PART_FALKOR_V1         0x800
+#define QCOM_CPU_PART_FALKOR            0xc00
+#define QCOM_CPU_PART_KRYO              0x200
+#define QCOM_CPU_PART_KRYO_2XX_GOLD     0x800
+#define QCOM_CPU_PART_KRYO_2XX_SILVER   0x801
+#define QCOM_CPU_PART_KRYO_3XX_SILVER   0x803
+#define QCOM_CPU_PART_KRYO_4XX_GOLD     0x804
+#define QCOM_CPU_PART_KRYO_4XX_SILVER   0x805
+
+#define NVIDIA_CPU_PART_DENVER          0x003
+#define NVIDIA_CPU_PART_CARMEL          0x004
+
+#define FUJITSU_CPU_PART_A64FX          0x001
+
+#define HISI_CPU_PART_TSV110            0xd01
+
+#define APPLE_CPU_PART_M1_ICESTORM      0x022
+#define APPLE_CPU_PART_M1_FIRESTORM     0x023
+#define APPLE_CPU_PART_M1_ICESTORM_PRO  0x024
+#define APPLE_CPU_PART_M1_FIRESTORM_PRO 0x025
+#define APPLE_CPU_PART_M1_ICESTORM_MAX  0x028
+#define APPLE_CPU_PART_M1_FIRESTORM_MAX 0x029
+#define APPLE_CPU_PART_M2_BLIZZARD      0x032
+#define APPLE_CPU_PART_M2_AVALANCHE     0x033
+#define APPLE_CPU_PART_M2_BLIZZARD_PRO  0x034
+#define APPLE_CPU_PART_M2_AVALANCHE_PRO 0x035
+#define APPLE_CPU_PART_M2_BLIZZARD_MAX  0x038
+#define APPLE_CPU_PART_M2_AVALANCHE_MAX 0x039
+
+#define AMPERE_CPU_PART_AMPERE1         0xac3
+
+#define MIDR_CORTEX_A53                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A53)
+#define MIDR_CORTEX_A57                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A57)
+#define MIDR_CORTEX_A72                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A72)
+#define MIDR_CORTEX_A73                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A73)
+#define MIDR_CORTEX_A75                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A75)
+#define MIDR_CORTEX_A35                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A35)
+#define MIDR_CORTEX_A55                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A55)
+#define MIDR_CORTEX_A76                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A76)
+#define MIDR_NEOVERSE_N1                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_NEOVERSE_N1)
+#define MIDR_CORTEX_A77                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A77)
+#define MIDR_NEOVERSE_V1                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_NEOVERSE_V1)
+#define MIDR_CORTEX_A78                 MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A78)
+#define MIDR_CORTEX_A78AE               MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A78AE)
+#define MIDR_CORTEX_X1                  MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_X1)
+#define MIDR_CORTEX_A510                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A510)
+#define MIDR_CORTEX_A710                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A710)
+#define MIDR_CORTEX_A715                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A715)
+#define MIDR_CORTEX_X2                  MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_X2)
+#define MIDR_NEOVERSE_N2                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_NEOVERSE_N2)
+#define MIDR_CORTEX_A78C                MIDR_CPU_MODEL(ARM_CPU_IMP_ARM, ARM_CPU_PART_CORTEX_A78C)
+#define MIDR_THUNDERX                   MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_THUNDERX)
+#define MIDR_THUNDERX_81XX              MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_THUNDERX_81XX)
+#define MIDR_THUNDERX_83XX              MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_THUNDERX_83XX)
+#define MIDR_OCTX2_98XX                 MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_98XX)
+#define MIDR_OCTX2_96XX                 MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_96XX)
+#define MIDR_OCTX2_95XX                 MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_95XX)
+#define MIDR_OCTX2_95XXN                MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_95XXN)
+#define MIDR_OCTX2_95XXMM               MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_95XXMM)
+#define MIDR_OCTX2_95XXO                MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_OCTX2_95XXO)
+#define MIDR_CAVIUM_THUNDERX2           MIDR_CPU_MODEL(ARM_CPU_IMP_CAVIUM, CAVIUM_CPU_PART_THUNDERX2)
+#define MIDR_BRAHMA_B53                 MIDR_CPU_MODEL(ARM_CPU_IMP_BRCM, BRCM_CPU_PART_BRAHMA_B53)
+#define MIDR_BRCM_VULCAN                MIDR_CPU_MODEL(ARM_CPU_IMP_BRCM, BRCM_CPU_PART_VULCAN)
+#define MIDR_QCOM_FALKOR_V1             MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_FALKOR_V1)
+#define MIDR_QCOM_FALKOR                MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_FALKOR)
+#define MIDR_QCOM_KRYO                  MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO)
+#define MIDR_QCOM_KRYO_2XX_GOLD         MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO_2XX_GOLD)
+#define MIDR_QCOM_KRYO_2XX_SILVER       MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO_2XX_SILVER)
+#define MIDR_QCOM_KRYO_3XX_SILVER       MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO_3XX_SILVER)
+#define MIDR_QCOM_KRYO_4XX_GOLD         MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO_4XX_GOLD)
+#define MIDR_QCOM_KRYO_4XX_SILVER       MIDR_CPU_MODEL(ARM_CPU_IMP_QCOM, QCOM_CPU_PART_KRYO_4XX_SILVER)
+#define MIDR_NVIDIA_DENVER              MIDR_CPU_MODEL(ARM_CPU_IMP_NVIDIA, NVIDIA_CPU_PART_DENVER)
+#define MIDR_NVIDIA_CARMEL              MIDR_CPU_MODEL(ARM_CPU_IMP_NVIDIA, NVIDIA_CPU_PART_CARMEL)
+#define MIDR_FUJITSU_A64FX              MIDR_CPU_MODEL(ARM_CPU_IMP_FUJITSU, FUJITSU_CPU_PART_A64FX)
+#define MIDR_HISI_TSV110                MIDR_CPU_MODEL(ARM_CPU_IMP_HISI, HISI_CPU_PART_TSV110)
+#define MIDR_APPLE_M1_ICESTORM          MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_ICESTORM)
+#define MIDR_APPLE_M1_FIRESTORM         MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_FIRESTORM)
+#define MIDR_APPLE_M1_ICESTORM_PRO      MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_ICESTORM_PRO)
+#define MIDR_APPLE_M1_FIRESTORM_PRO     MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_FIRESTORM_PRO)
+#define MIDR_APPLE_M1_ICESTORM_MAX      MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_ICESTORM_MAX)
+#define MIDR_APPLE_M1_FIRESTORM_MAX     MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M1_FIRESTORM_MAX)
+#define MIDR_APPLE_M2_BLIZZARD          MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_BLIZZARD)
+#define MIDR_APPLE_M2_AVALANCHE         MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_AVALANCHE)
+#define MIDR_APPLE_M2_BLIZZARD_PRO      MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_BLIZZARD_PRO)
+#define MIDR_APPLE_M2_AVALANCHE_PRO     MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_AVALANCHE_PRO)
+#define MIDR_APPLE_M2_BLIZZARD_MAX      MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_BLIZZARD_MAX)
+#define MIDR_APPLE_M2_AVALANCHE_MAX     MIDR_CPU_MODEL(ARM_CPU_IMP_APPLE, APPLE_CPU_PART_M2_AVALANCHE_MAX)
+#define MIDR_AMPERE1                    MIDR_CPU_MODEL(ARM_CPU_IMP_AMPERE, AMPERE_CPU_PART_AMPERE1)
+#define MIDR_QEMU                       MIDR_CPU_MODEL(0, 'Q')
+
+/* GIC registers */
+#define ICC_IAR0_SYS    sysreg_64(0, c12,  c8, 0)
+#define ICC_IAR1_SYS    sysreg_64(0, c12, c12, 0)
+#define ICC_EOIR0_SYS   sysreg_64(0, c12,  c8, 1)
+#define ICC_EOIR1_SYS   sysreg_64(0, c12, c12, 1)
+#define ICC_HPPIR0_SYS  sysreg_64(0, c12,  c8, 2)
+#define ICC_HPPIR1_SYS  sysreg_64(0, c12, c12, 2)
+#define ICC_BPR0_SYS    sysreg_64(0, c12,  c8, 3)
+#define ICC_BPR1_SYS    sysreg_64(0, c12, c12, 3)
+#define ICC_DIR_SYS     sysreg_64(0, c12, c11, 1)
+#define ICC_PMR_SYS     sysreg_64(0,  c4,  c6, 0)
+#define ICC_RPR_SYS     sysreg_64(0, c12, c11, 3)
+#define ICC_CTLR_SYS    sysreg_64(0, c12, c12, 4)
+#define ICC_SRE_SYS     sysreg_64(0, c12, c12, 5)
+#define ICC_IGRPEN0_SYS sysreg_64(0, c12, c12, 6)
+#define ICC_IGRPEN1_SYS sysreg_64(0, c12, c12, 7)
+#define ICC_SGI0R_SYS   sysreg_64(0, c12, c11, 7)
+#define ICC_SGI1R_SYS   sysreg_64(0, c12, c11, 5)
+#define ICC_ASGI1R_SYS  sysreg_64(0, c12, c11, 6)
+
+/* Arch timer registers */
+#define CNTP_CTL        CNTP_CTL_EL0    /* EL1 Physical Timer */
+#define CNTHP_CTL       CNTHP_CTL_EL2   /* EL2 Non-secure Physical Timer */
+#define CNTHPS_CTL      CNTHPS_CTL_EL2  /* EL2 Secure Physical Timer */
+#define CNTPS_CTL       CNTPS_CTL_EL1   /* EL3 Physical Timer */
+#define CNTV_CTL        CNTV_CTL_EL0    /* EL1 Virtual Timer */
+#define CNTHV_CTL       CNTHV_CTL_EL2   /* EL2 Non-secure Virtual Timer */
+#define CNTHVS_CTL      CNTHVS_CTL_EL2  /* EL2 Secure Virtual Timer */
+
+#define CNTP_CVAL       CNTP_CVAL_EL0
+#define CNTHP_CVAL      CNTHP_CVAL_EL2
+#define CNTHPS_CVAL     CNTHPS_CVAL_EL2
+#define CNTPS_CVAL      CNTPS_CVAL_EL1
+#define CNTV_CVAL       CNTV_CVAL_EL0
+#define CNTHV_CVAL      CNTHV_CVAL_EL2
+#define CNTHVS_CVAL     CNTHVS_CVAL_EL2
+
+#define CNTP_TVAL       CNTP_TVAL_EL0
+#define CNTHP_TVAL      CNTHP_TVAL_EL2
+#define CNTHPS_TVAL     CNTHPS_TVAL_EL2
+#define CNTPS_TVAL      CNTPS_TVAL_EL1
+#define CNTV_TVAL       CNTV_TVAL_EL0
+#define CNTHV_TVAL      CNTHV_TVAL_EL2
+#define CNTHVS_TVAL     CNTHVS_TVAL_EL2
+
+#define CNTPCT          CNTPCT_EL0
+#define CNTVCT          CNTVCT_EL0
+#define CNTFRQ          CNTFRQ_EL0
+
+extern rt_uint64_t rt_cpu_mpidr_table[];
 
 #endif /* __RT_HW_CPU_H__ */

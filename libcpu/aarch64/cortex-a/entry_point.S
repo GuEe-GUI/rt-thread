@@ -7,6 +7,7 @@
  * 2020-01-15     bigmagic     the first version
  * 2020-08-10     SummerGift   support clang compiler
  * 2023-04-29     GuEe-GUI     support kernel's ARM64 boot header
+ * 2023-06-04     GuEe-GUI     support cpu init by device-tree
  */
 
 #ifndef __ASSEMBLY__
@@ -77,7 +78,7 @@ boot_arg2 .req x24
 stack_top .req x25
 
     .global _start
-__start:
+_start:
 /*
  * Boot CPU general-purpose register settings:
  *   x0 = physical address of device tree blob (dtb) in system RAM.
@@ -98,6 +99,10 @@ __start:
     bl      init_cpu_el
     bl      init_kernel_bss
     bl      init_cpu_stack_early
+
+    /* Save devicetree info */
+    mov     x0, dtb_paddr
+    bl      rt_hw_fdt_install_early
 
     /* Now we are in the end of boot cpu process */
     ldr     x8, =rtthread_startup

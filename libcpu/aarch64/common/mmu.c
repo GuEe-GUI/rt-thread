@@ -23,8 +23,8 @@
 #include "mmu.h"
 #include "tlb.h"
 
-#ifdef RT_USING_SMART
 #include "ioremap.h"
+#ifdef RT_USING_SMART
 #include <lwp_mm.h>
 #endif
 
@@ -47,6 +47,10 @@
 #define MMU_TBL_BLOCK_2M_LEVEL 2
 #define MMU_TBL_PAGE_4k_LEVEL  3
 #define MMU_TBL_LEVEL_NR       4
+
+#ifndef KERNEL_VADDR_START
+#define KERNEL_VADDR_START ARCH_RAM_OFFSET
+#endif
 
 volatile unsigned long MMUTable[512] __attribute__((aligned(4 * 1024)));
 
@@ -425,21 +429,12 @@ void rt_hw_mmu_setup(rt_aspace_t aspace, struct mem_desc *mdesc, int desc_nr)
     rt_page_cleanup();
 }
 
-#ifdef RT_USING_SMART
 static void _init_region(void *vaddr, size_t size)
 {
     rt_ioremap_start = vaddr;
     rt_ioremap_size = size;
     rt_mpr_start = (char *)rt_ioremap_start - rt_mpr_size;
 }
-#else
-
-#define RTOS_VEND (0xfffffffff000UL)
-static inline void _init_region(void *vaddr, size_t size)
-{
-    rt_mpr_start = (void *)(RTOS_VEND - rt_mpr_size);
-}
-#endif
 
 /**
  * This function will initialize rt_mmu_info structure.
@@ -448,12 +443,11 @@ static inline void _init_region(void *vaddr, size_t size)
  * @param v_address  virtual address
  * @param size       map size
  * @param vtable     mmu table
- * @param pv_off     pv offset in kernel space
  *
  * @return 0 on successful and -1 for fail
  */
 int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
-                       size_t *vtable, size_t pv_off)
+                       size_t *vtable)
 {
     size_t va_s, va_e;
 
@@ -478,12 +472,8 @@ int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
         return -1;
     }
 
-#ifdef RT_USING_SMART
     rt_aspace_init(aspace, (void *)KERNEL_VADDR_START, 0 - KERNEL_VADDR_START,
                    vtable);
-#else
-    rt_aspace_init(aspace, (void *)0x1000, RTOS_VEND - 0x1000ul, vtable);
-#endif
 
     _init_region(v_address, size);
 
@@ -499,9 +489,13 @@ int rt_hw_mmu_map_init(rt_aspace_t aspace, void *v_address, size_t size,
 void mmu_tcr_init(void)
 {
     unsigned long val64;
+    unsigned long pa_range;
 
     val64 = 0x00447fUL;
     __asm__ volatile("msr MAIR_EL1, %0\n dsb sy\n" ::"r"(val64));
+
+    __asm__ volatile ("mrs %0, ID_AA64MMFR0_EL1":"=r"(val64));
+    pa_range = val64 & 0xf; /* PARange */
 
     /* TCR_EL1 */
     val64 = (16UL << 0)      /* t0sz 48bit */
@@ -518,7 +512,7 @@ void mmu_tcr_init(void)
             | (0x3UL << 26)  /* t1 outer wb cacheable */
             | (0x2UL << 28)  /* t1 outer shareable */
             | (0x2UL << 30)  /* t1 4k */
-            | (0x1UL << 32)  /* 001b 64GB PA */
+            | (pa_range << 32)  /* PA range */
             | (0x0UL << 35)  /* reserved */
             | (0x1UL << 36)  /* as: 0:8bit 1:16bit */
             | (0x0UL << 37)  /* tbi0 */
