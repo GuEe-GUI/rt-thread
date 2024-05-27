@@ -1,0 +1,2 @@
+source "$RTT_DIR/components/drivers/mtd/Kconfig.nand"
+source "$RTT_DIR/components/drivers/mtd/Kconfig.nor"

@@ -1,21 +1,24 @@
 from building import *
 
-cwd = GetCurrentDir()
-src = []
-depend = ['']
-
-CPPPATH = [cwd + '/../include']
 group = []
+
+if not GetDepend(['RT_USING_MTD_NOR']) and not GetDepend(['RT_USING_MTD_NAND']):
+    Return('group')
+
+cwd = GetCurrentDir()
+CPPPATH = [cwd + '/../include']
+
+src = []
 
 if GetDepend(['RT_USING_MTD_NOR']):
     src += ['mtd_nor.c']
-    depend += ['RT_USING_MTD_NOR']
 
 if GetDepend(['RT_USING_MTD_NAND']):
     src += ['mtd_nand.c']
-    depend += ['RT_USING_MTD_NAND']
 
-if src:
-    group = DefineGroup('DeviceDrivers', src, depend = depend, CPPPATH = CPPPATH)
+if GetDepend(['RT_USING_MTD_NOR_CFI']):
+    src += ['mtd-cfi.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 
 Return('group')
