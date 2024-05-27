@@ -8,38 +8,24 @@
  * 2020/10/7      bernard      the first version
  */
 
-#include <stdio.h>
+#include <rthw.h>
 #include <rtthread.h>
-#include "drivers/core/bus.h"
 
-#ifdef RT_USING_FDT
-#include "dtb_node.h"
+int main(int argc, char** argv)
+{
+    const char *oem;
+
+#ifdef RT_USING_SMART
+    oem = "Smart";
+#else
+    oem = "Thread";
 #endif
 
-struct rt_device timer_device = {
-    .name = "timer_virt64",
-};
+    rt_ubase_t level = rt_hw_interrupt_disable();
 
-// static void timer_init(void)
-// {
-//     rt_device_attach(&timer_device);
-// }
+    rt_kprintf("Hi, this is RT-%s!!\n", oem);
 
-int main(void)
-{
-    /* example: init timer device statically */
-    // timer_init();
-
-    rt_uint8_t times = 0;
-
-    printf("hello rt-thread\n");
-
-    /*test timer*/
-    while (times++ < 2)
-    {
-        rt_thread_mdelay(500);
-        printf("hello rt-thread\n");
-    }
+    rt_hw_interrupt_enable(level);
 
     return 0;
 }

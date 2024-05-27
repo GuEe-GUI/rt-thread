@@ -4,12 +4,11 @@ from building import *
 
 cwd     = GetCurrentDir()
 src     = Glob('*.c')
-src     += Glob('expired/*.c')
-src     += Glob('virtio/*.c')
 
 CPPPATH = [cwd]
-CPPPATH += [cwd + '/expired']
-CPPPATH += [cwd + '/virtio']
+
+if not GetDepend(['RT_FIRMWARE_QEMU_FW_CFG', 'RT_VIDEO_FB']):
+    SrcRemove(src, ['drv_romfb.c'])
 
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)
 

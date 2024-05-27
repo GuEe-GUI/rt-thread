@@ -13,13 +13,6 @@
 #include "asm_fpu.h"
 
 .text
-.weak rt_hw_cpu_id_set
-.type rt_hw_cpu_id_set, @function
-rt_hw_cpu_id_set:
-    mrs x0, mpidr_el1           /* MPIDR_EL1: Multi-Processor Affinity Register */
-    and x0, x0, #15
-    msr tpidr_el1, x0
-    ret
 
 /*
 int rt_hw_cpu_id(void)
@@ -37,45 +30,6 @@ void rt_hw_set_process_id(size_t id)
 rt_hw_set_process_id:
     msr CONTEXTIDR_EL1, x0
     ret
-
-  /*
- *enable gtimer
- */
-.globl rt_hw_gtimer_enable
-rt_hw_gtimer_enable:
-    MOV X0,#1
-    MSR CNTP_CTL_EL0,X0
-    RET
-
-/*
- *set gtimer CNTP_TVAL_EL0 value
- */
-.globl rt_hw_set_gtimer_val
-rt_hw_set_gtimer_val:
-    MSR CNTP_TVAL_EL0,X0
-    RET
-
-/*
- *get gtimer CNTP_TVAL_EL0 value
- */
-.globl rt_hw_get_gtimer_val
-rt_hw_get_gtimer_val:
-    MRS X0,CNTP_TVAL_EL0
-    RET
-
-
-.globl rt_hw_get_cntpct_val
-rt_hw_get_cntpct_val:
-    MRS X0, CNTPCT_EL0
-    RET
-
-/*
- *get gtimer frq value
- */
-.globl rt_hw_get_gtimer_frq
-rt_hw_get_gtimer_frq:
-    MRS X0,CNTFRQ_EL0
-    RET
 
 .macro SAVE_CONTEXT
     /* Save the entire context. */

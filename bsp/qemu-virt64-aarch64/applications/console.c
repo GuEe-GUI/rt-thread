@@ -14,28 +14,6 @@
 #include <console.h>
 #endif
 
-#include <virtio_console.h>
-
-static int console_init()
-{
-    rt_err_t status = RT_EOK;
-    rt_device_t device = rt_device_find("virtio-console0");
-
-    if (device != RT_NULL && rt_device_open(device, 0) == RT_EOK)
-    {
-        /* Create vport0p1 */
-        // status = rt_device_control(device, VIRTIO_DEVICE_CTRL_CONSOLE_PORT_CREATE, RT_NULL);
-    }
-
-    if (device != RT_NULL)
-    {
-        rt_device_close(device);
-    }
-
-    return status;
-}
-INIT_ENV_EXPORT(console_init);
-
 #ifdef FINSH_USING_MSH
 
 static int console(int argc, char **argv)
@@ -55,11 +33,11 @@ static int console(int argc, char **argv)
 
                 if (dev != RT_NULL)
                 {
-                    #ifdef RT_USING_SMART
-                        console_set_iodev(dev);
-                    #else
-                        rt_kprintf("TODO not supported\n");
-                    #endif
+                #ifdef RT_USING_SMART
+                    console_set_iodev(dev);
+                #else
+                    rt_kprintf("TODO not supported\n");
+                #endif
                 }
             }
         #else
