@@ -1,0 +1,10 @@
+menuconfig RT_USING_WDT
+    bool "Using Watch Dog device drivers"
+    default n
+
+config RT_WDT_I6300ESB
+    bool "Intel 6300ESB Timer/Watchdog"
+    depends on RT_USING_DM
+    depends on RT_USING_WDT
+    depends on RT_USING_PCI
+
