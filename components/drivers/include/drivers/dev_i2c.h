@@ -286,6 +286,11 @@ rt_err_t rt_i2c_driver_register(struct rt_i2c_driver *driver);
 rt_err_t rt_i2c_device_register(struct rt_i2c_client *client);
 
 #define RT_I2C_DRIVER_EXPORT(driver)  RT_DRIVER_EXPORT(driver, i2c, BUILIN)
+
+rt_inline const void *rt_i2c_client_id_data(struct rt_i2c_client *client)
+{
+    return client->id ? client->id->data : (client->ofw_id ? client->ofw_id->data : RT_NULL);
+}
 #endif /* RT_USING_DM */
 
 /**

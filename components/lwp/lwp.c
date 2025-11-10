@@ -479,7 +479,7 @@ pid_t lwp_execve(char *filename, int debug, int argc, char **argv, char **envp)
             if (debug && rt_dbg_ops)
             {
                 lwp->debug = debug;
-                rt_thread_control(thread, RT_THREAD_CTRL_BIND_CPU, (void*)0);
+                rt_thread_control(thread, RT_THREAD_CTRL_BIND_CPU, (void*)rt_hw_master_cpu_id());
             }
 
             rt_thread_startup(thread);
@@ -522,6 +522,14 @@ void lwp_user_setting_restore(rt_thread_t thread)
     }
 #if !defined(ARCH_RISCV64)
     /* tidr will be set in RESTORE_ALL in risc-v */
+#if defined(RT_USING_CPLUSPLUS)
+    if (!thread->thread_idr)
+    {
+        extern void *rt_hw_thread_tls_base(struct rt_thread *tid);
+
+        thread->thread_idr = rt_hw_thread_tls_base(thread);
+    }
+#endif
     arch_set_tidr(thread->thread_idr);
 #endif
 

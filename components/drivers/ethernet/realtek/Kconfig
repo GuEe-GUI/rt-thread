@@ -1,0 +1,8 @@
+config RT_ETHERNET_REALTEK
+    bool "Realtek"
+    depends on RT_USING_PCI
+
+config RT_REALTEK_PTP
+    bool "PTP supported"
+    depends on RT_ETHERNET_REALTEK
+    depends on RT_USING_PTP

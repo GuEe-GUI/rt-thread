@@ -1,4 +1,4 @@
-config RT_USING_TOUCH
+menuconfig RT_USING_TOUCH
     bool "Using Touch device drivers"
     default n
     if RT_USING_TOUCH

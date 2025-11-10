@@ -17,9 +17,10 @@
 #include <rtdbg.h>
 
 #include <mm_aspace.h>
+#include <mm_memblock.h>
 #include <dt-bindings/size.h>
 
-static RT_DEFINE_SPINLOCK(dma_pools_lock);
+static struct rt_spinlock dma_pools_lock = {};
 static rt_list_t dma_pool_nodes = RT_LIST_OBJECT_INIT(dma_pool_nodes);
 
 static struct rt_dma_pool *dma_pool_install(rt_region_t *region);
@@ -291,9 +292,13 @@ static rt_ubase_t dma_pool_alloc(struct rt_dma_pool *pool, rt_size_t size)
                 rt_bitmap_set_bit(pool->map, next_bit);
             }
 
+            LOG_D("%s offset = %p, pages = %d", "Alloc",
+                    pool->start + bit * ARCH_PAGE_SIZE, size);
+
             return pool->start + bit * ARCH_PAGE_SIZE;
         }
     _next:
+        ;
     }
 
     return RT_NULL;
@@ -310,6 +315,8 @@ static void dma_pool_free(struct rt_dma_pool *pool, rt_ubase_t offset, rt_size_t
     {
         rt_bitmap_clear_bit(pool->map, bit);
     }
+
+    LOG_D("%s offset = %p, pages = %d", "Free", offset, size);
 }
 
 static void *dma_alloc(struct rt_device *dev, rt_size_t size,
@@ -344,11 +351,6 @@ static void *dma_alloc(struct rt_device *dev, rt_size_t size,
             continue;
         }
 
-        if ((flags & RT_DMA_F_LINEAR) && !((pool->flags & RT_DMA_F_LINEAR)))
-        {
-            continue;
-        }
-
         *dma_handle = dma_pool_alloc(pool, size);
 
         if (*dma_handle && !(flags & RT_DMA_F_NOMAP))
@@ -356,6 +358,10 @@ static void *dma_alloc(struct rt_device *dev, rt_size_t size,
             if (flags & RT_DMA_F_NOCACHE)
             {
                 dma_buffer = rt_ioremap_nocache((void *)*dma_handle, size);
+            }
+            else if (flags & RT_DMA_F_WT)
+            {
+                dma_buffer = rt_ioremap_wt((void *)*dma_handle, size);
             }
             else
             {
@@ -425,9 +431,26 @@ void *rt_dma_alloc(struct rt_device *dev, rt_size_t size,
     {
         dma_buffer = ops->alloc(dev, size, &dma_handle_s, flags);
     }
-    else
+    else if (flags & RT_DMA_F_LINEAR)
     {
         dma_buffer = dma_alloc(dev, size, &dma_handle_s, flags);
+
+    #ifdef RT_USING_IOMMU
+        if (!(flags & RT_DMA_F_NOMAP) && dev->iommu_domain)
+        {
+            rt_err_t err;
+            void *ioaddr = (void *)dma_handle_s;
+
+            if ((err = rt_iommu_map(dev, ioaddr, ioaddr, size, MMF_MAP_SHARED)))
+            {
+                LOG_E("%s: IOMMU map IOVA<%p> error = %s",
+                        rt_dm_dev_get_name(dev), ioaddr, rt_strerror(err));
+
+                dma_free(dev, size, dma_buffer, dma_handle_s, flags);
+                dma_buffer = RT_NULL;
+            }
+        }
+    #endif /* RT_USING_IOMMU */
     }
 
     if (!dma_buffer)
@@ -459,8 +482,17 @@ void rt_dma_free(struct rt_device *dev, rt_size_t size,
     {
         ops->free(dev, size, cpu_addr, dma_handle, flags);
     }
-    else
+    else if (flags & RT_DMA_F_LINEAR)
     {
+    #ifdef RT_USING_IOMMU
+        if (!(flags & RT_DMA_F_NOMAP) && dev->iommu_domain)
+        {
+            void *ioaddr = (void *)dma_handle;
+
+            rt_iommu_unmap(dev, ioaddr, size);
+        }
+    #endif /* RT_USING_IOMMU */
+
         dma_free(dev, size, cpu_addr, dma_handle, flags);
     }
 }
@@ -584,20 +616,33 @@ struct rt_dma_pool *rt_dma_pool_install(rt_region_t *region)
     return pool;
 }
 
-rt_err_t rt_dma_pool_extract(rt_region_t *region_list, rt_size_t list_len,
-        rt_size_t cma_size, rt_size_t coherent_pool_size)
+rt_err_t rt_dma_pool_extract(rt_size_t cma_size, rt_size_t coherent_pool_size)
 {
     struct rt_dma_pool *pool;
-    rt_region_t *region = region_list, *region_high = RT_NULL, cma, coherent_pool;
+    struct rt_mmblk_reg *reg, *reg_high;
+    struct rt_memblock *memblock = rt_memblock_get_reserved();
+    rt_region_t *region, *region_high = RT_NULL, cma, coherent_pool;
 
-    if (!region_list || !list_len || cma_size < coherent_pool_size)
+    if (!memblock)
+    {
+        return -RT_ENOSYS;
+    }
+
+    /* Coherent pool is included in CMA */
+    if (cma_size < coherent_pool_size)
     {
         return -RT_EINVAL;
     }
 
-    for (rt_size_t i = 0; i < list_len; ++i, ++region)
+    rt_slist_for_each_entry(reg, &memblock->reg_list, node)
     {
-        if (!region->name)
+        if (!reg->alloc || (reg->flags & MEMBLOCK_HOTPLUG))
+        {
+            continue;
+        }
+
+        region = &reg->memreg;
+        if (rt_strcmp(region->name, "dma-pool") || !reg->memreg.name)
         {
             continue;
         }
@@ -608,6 +653,7 @@ rt_err_t rt_dma_pool_extract(rt_region_t *region_list, rt_size_t list_len,
             if ((rt_ssize_t)((4UL * SIZE_GB) - region->start) < cma_size)
             {
                 region_high = region;
+                reg_high = reg;
                 continue;
             }
 
@@ -618,6 +664,7 @@ rt_err_t rt_dma_pool_extract(rt_region_t *region_list, rt_size_t list_len,
     if (region_high)
     {
         region = region_high;
+        reg = reg_high;
         LOG_W("No available DMA zone in 4G");
 
         goto _found;
@@ -630,9 +677,6 @@ _found:
     {
         cma.start = region->start;
         cma.end = cma.start + cma_size;
-
-        /* Update input region */
-        region->start += cma_size;
     }
     else
     {
@@ -656,6 +700,8 @@ _found:
     {
         return -RT_ENOMEM;
     }
+
+    reg->alloc = RT_FALSE;
 
     return RT_EOK;
 }

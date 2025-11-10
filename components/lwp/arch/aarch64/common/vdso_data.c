@@ -9,11 +9,12 @@
  */
 
 #include <rtthread.h>
-#include <gtimer.h>
 #include <ktime.h>
 #include <time.h>
 #include <vdso_datapage.h>
 #include <vdso_data.h>
+
+extern rt_uint64_t arm_arch_timer_get_count(void);
 
 void rt_vdso_update_glob_time(void)
 {
@@ -29,6 +30,6 @@ void rt_vdso_update_glob_time(void)
     vdso_ts = &vdata[CS_HRES_COARSE].basetime[CLOCK_MONOTONIC];
     rt_ktime_boottime_get_ns(vdso_ts);
 
-    vdata->cycle_last = rt_hw_get_cntpct_val();
+    vdata->cycle_last = arm_arch_timer_get_count();
     rt_vdso_write_end(vdata);
 }

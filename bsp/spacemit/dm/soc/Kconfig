@@ -1,0 +1,21 @@
+config RT_SOC_SPACEMIT_K1X_RPROC
+    bool "Spacemit k1x remoteproc Driver"
+    default y
+
+config RT_SOC_CHIP_MEDIA_JPU
+    bool "Chip media JPU Driver"
+    default n
+
+config RT_SOC_SPACEMIT_V2D
+    bool "Spacemit V2D Engine Driver"
+    default n
+
+config RT_SOC_SPACEMIT_K1X_TCM
+    bool "Spacemit k1x generic TCM alloc management Driver"
+    depends on RT_USING_MEMHEAP
+    default n
+
+config RT_SOC_SPACEMIT_SOCINFO
+    bool "Spacemit SoC information Driver"
+    depends on RT_USING_NVMEM
+    default n

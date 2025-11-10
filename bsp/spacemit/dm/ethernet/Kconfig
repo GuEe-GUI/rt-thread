@@ -1,0 +1,4 @@
+config RT_ETHERNET_K1X_EMAC
+    bool "Spacemit k1x Emac devices"
+    select RT_USING_PTP
+    default y

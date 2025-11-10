@@ -172,7 +172,7 @@ int rt_genphy_update_link(struct rt_phy_device *phydev)
         !(mii_reg & RT_BMSR_ANEGCOMPLETE))
         {
         int i = 0;
-        rt_kprintf("Waiting for PHY auto negotiation to complete");
+        LOG_I("Waiting for PHY auto negotiation to complete");
         while (!(mii_reg & RT_BMSR_ANEGCOMPLETE))
         {
 

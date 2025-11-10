@@ -15,6 +15,13 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
+#ifdef RT_USING_CLK
+#include <drivers/clk.h>
+#endif
+#ifdef RT_USING_IOMMU
+#include <drivers/iommu.h>
+#endif
+#include <drivers/dev_pin.h>
 #include <drivers/platform.h>
 #include <drivers/core/bus.h>
 #include <drivers/core/dm.h>
@@ -119,6 +126,20 @@ static rt_err_t platform_probe(rt_device_t dev)
     struct rt_ofw_node *np = dev->ofw_node;
 #endif
 
+#ifdef RT_USING_PINCTRL
+    if (rt_pin_ctrl_confs_apply_by_name(dev, RT_NULL))
+    {
+        rt_pin_ctrl_confs_apply(dev, 0);
+    }
+#endif
+
+#ifdef RT_USING_CLK
+    if ((err = rt_ofw_clk_set_defaults(dev->ofw_node)))
+    {
+        return err;
+    }
+#endif
+
     err = rt_dm_power_domain_attach(dev, RT_TRUE);
 
     if (err && err != -RT_EEMPTY)
@@ -133,6 +154,23 @@ static rt_err_t platform_probe(rt_device_t dev)
 
         return err;
     }
+
+#ifdef RT_USING_IOMMU
+    err = rt_iommu_attach(dev);
+
+    if (err && err != -RT_EEMPTY)
+    {
+        LOG_E("Attach iommu domain error = %s in device %s", rt_strerror(err),
+        #ifdef RT_USING_OFW
+            (pdev->name && pdev->name[0]) ? pdev->name : rt_ofw_node_full_name(np)
+        #else
+            pdev->name
+        #endif
+            );
+
+        return err;
+    }
+#endif /* RT_USING_IOMMU */
 
     err = pdrv->probe(pdev);
 
@@ -152,6 +190,10 @@ static rt_err_t platform_probe(rt_device_t dev)
             LOG_W("System not memory in driver %s", pdrv->name);
         }
 
+    #ifdef RT_USING_IOMMU
+        rt_iommu_detach(dev);
+    #endif
+
         rt_dm_power_domain_detach(dev, RT_TRUE);
     }
 
@@ -168,6 +210,9 @@ static rt_err_t platform_remove(rt_device_t dev)
         pdrv->remove(pdev);
     }
 
+#ifdef RT_USING_IOMMU
+    rt_iommu_detach(dev);
+#endif
     rt_dm_power_domain_detach(dev, RT_TRUE);
     rt_platform_ofw_free(pdev);
 
@@ -184,6 +229,9 @@ static rt_err_t platform_shutdown(rt_device_t dev)
         pdrv->shutdown(pdev);
     }
 
+#ifdef RT_USING_IOMMU
+    rt_iommu_detach(dev);
+#endif
     rt_dm_power_domain_detach(dev, RT_TRUE);
     rt_platform_ofw_free(pdev);
 

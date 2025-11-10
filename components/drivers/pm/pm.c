@@ -16,6 +16,9 @@
 #include <rthw.h>
 #include <rtthread.h>
 #include <drivers/pm.h>
+#ifdef RT_USING_DVFS
+#include <drivers/dvfs.h>
+#endif
 #include <stdlib.h>
 
 #ifdef RT_USING_PM
@@ -119,6 +122,14 @@ static rt_err_t _pm_device_suspend(rt_uint8_t mode)
         device_pm = rt_slist_entry(node, struct rt_device_pm, list);
         if (device_pm->ops != RT_NULL && device_pm->ops->suspend != RT_NULL)
         {
+        #ifdef RT_USING_DVFS
+            ret = rt_dvfs_scaling_pm_suspend(device_pm, mode);
+            if (ret != RT_EOK)
+            {
+                break;
+            }
+        #endif /* RT_USING_DVFS */
+
             ret = device_pm->ops->suspend(device_pm->device, mode);
             if(ret != RT_EOK)
             {
@@ -144,6 +155,10 @@ static void _pm_device_resume(rt_uint8_t mode)
         if (device_pm->ops != RT_NULL && device_pm->ops->resume != RT_NULL)
         {
             device_pm->ops->resume(device_pm->device, mode);
+
+        #ifdef RT_USING_DVFS
+            rt_dvfs_scaling_pm_resume(device_pm, mode);
+        #endif
         }
     }
 }
@@ -161,6 +176,10 @@ static void _pm_device_frequency_change(rt_uint8_t mode)
         device_pm = rt_slist_entry(node, struct rt_device_pm, list);
         if (device_pm->ops->frequency_change != RT_NULL)
         {
+        #ifdef RT_USING_DVFS
+            rt_dvfs_scaling_pm_frequency_change(device_pm, mode);
+        #endif
+
             device_pm->ops->frequency_change(device_pm->device, mode);
         }
     }

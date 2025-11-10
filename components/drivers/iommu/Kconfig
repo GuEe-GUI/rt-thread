@@ -1,0 +1,41 @@
+menuconfig RT_USING_IOMMU
+    bool "Using I/O memory management unit (IOMMU)"
+    depends on RT_USING_DM
+    depends on ARCH_MM_MMU
+    select RT_USING_ADT
+    select RT_USING_ADT_REF
+    default n
+    help
+      Compared with DMA, IOMMU has the following advantages:
+        - Large regions of memory can be allocated without the need to be contiguous
+          in physical memory. The IOMMU maps contiguous virtual addresses (VAs) to
+          the fragmented PAs.
+        - Devices that do not support memory addresses long enough to address the
+          entire physical memory can still address the entire memory through the
+          IOMMU. For example, x86 computers can address more than 4 GB of memory with
+          the Physical Address Extension (PAE) feature. But an ordinary 32-bit PCI
+          device cannot address the memory above 4 GB. With IOMMU, the device can
+          address the entire physical memory.
+        - Memory is protected from malicious devices that are attempting DMA attacks
+          and faulty devices that are attempting errant memory transfers because a
+          device cannot read or write to the mapped physical memory.
+        - In virtualization, a guest OS can use hardware that is not specifically made
+          for virtualization. Higher performance hardware such as graphics cards uses
+          DMA to access memory directly. In a virtual environment, all memory addresses
+          are re-mapped by the virtualization software (such as QEMU), which causes
+          the guest OS fails to access memory using DMA. The IOMMU handles this
+          re-mapping, allowing the drivers to use DMA to access memory in the guest OS.
+        - In some architectures IOMMU also performs interrupt re-mapping, in a manner
+          similar to address re-mapping.
+        - Peripheral memory paging can be supported by an IOMMU. A peripheral using
+          the PCI-SIG PCIe Address Translation Services (ATS) Page Request Interface
+          (PRI) extension can detect and signal the need for memory manager services.
+
+config RT_IOMMU_SMMUV3
+    bool "ARM SMMUv3"
+    depends on RT_USING_IOMMU
+    default y
+
+if RT_USING_IOMMU
+    osource "$(SOC_DM_IOMMU_DIR)/Kconfig"
+endif
